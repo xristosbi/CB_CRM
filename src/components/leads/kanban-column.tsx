@@ -2,7 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
+import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { OpportunityCard as OpportunityCardData, Stage } from "@/lib/types";
@@ -20,12 +28,14 @@ export function KanbanColumn({
   onQuickCall,
   onQuickNote,
   onRenameStage,
+  onDeleteStage,
 }: {
   stage: Stage;
   opportunities: OpportunityCardData[];
   onQuickCall: (opportunity: OpportunityCardData) => void;
   onQuickNote: (opportunity: OpportunityCardData) => void;
   onRenameStage: (stageId: string, name: string) => void;
+  onDeleteStage: (stage: Stage) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   const [editing, setEditing] = useState(false);
@@ -95,9 +105,31 @@ export function KanbanColumn({
             </div>
           )}
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {opportunities.length}
-        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="text-xs text-muted-foreground">{opportunities.length}</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                aria-label="Επιλογές σταδίου"
+              >
+                <MoreVertical className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={startEditing}>
+                <Pencil className="size-4" />
+                Μετονομασία
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onClick={() => onDeleteStage(stage)}>
+                <Trash2 className="size-4" />
+                Διαγραφή σταδίου
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
       {total > 0 && (
         <p className="px-3 pb-2 text-xs text-muted-foreground">{currency.format(total)}</p>

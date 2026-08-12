@@ -9,9 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { addNote, addTask, setTaskDone } from "@/lib/queries/contacts";
 import { createClient } from "@/lib/supabase/client";
 import type { ActivityEntry, Contact, ContactOpportunity, FollowUpTask } from "@/lib/types";
-import { AddNoteDialog } from "./add-note-dialog";
 import { AddTaskDialog } from "./add-task-dialog";
 import { ActivityFeed } from "./activity-feed";
+import { NotesPanel } from "./notes-panel";
 import { OpportunitiesList } from "./opportunities-list";
 import { TasksPanel } from "./tasks-panel";
 
@@ -99,7 +99,7 @@ export function ContactDetailView({
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 p-4 md:p-6">
+    <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div>
         <Link
           href="/contacts"
@@ -148,32 +148,37 @@ export function ContactDetailView({
         )}
       </div>
 
-      <section>
-        <h2 className="text-sm font-semibold text-muted-foreground">Opportunities</h2>
-        <div className="mt-2">
-          <OpportunitiesList opportunities={initialOpportunities} />
-        </div>
-      </section>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
+        <div className="flex flex-col gap-6">
+          <section>
+            <h2 className="text-sm font-semibold text-muted-foreground">Opportunities</h2>
+            <div className="mt-2">
+              <OpportunitiesList opportunities={initialOpportunities} />
+            </div>
+          </section>
 
-      <section>
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">Follow-up tasks</h2>
-          <AddTaskDialog onCreate={handleAddTask} />
-        </div>
-        <div className="mt-2">
-          <TasksPanel tasks={tasks} onToggle={handleToggleTask} />
-        </div>
-      </section>
+          <section>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-muted-foreground">Follow-up tasks</h2>
+              <AddTaskDialog onCreate={handleAddTask} />
+            </div>
+            <div className="mt-2">
+              <TasksPanel tasks={tasks} onToggle={handleToggleTask} />
+            </div>
+          </section>
 
-      <section>
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">Activity</h2>
-          <AddNoteDialog onCreate={handleAddNote} />
+          <section>
+            <h2 className="text-sm font-semibold text-muted-foreground">Activity</h2>
+            <div className="mt-3">
+              <ActivityFeed activity={activity} />
+            </div>
+          </section>
         </div>
-        <div className="mt-3">
-          <ActivityFeed activity={activity} />
+
+        <div className="lg:sticky lg:top-6">
+          <NotesPanel activity={activity} onAdd={handleAddNote} />
         </div>
-      </section>
+      </div>
     </div>
   );
 }

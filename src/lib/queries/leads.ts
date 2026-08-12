@@ -112,6 +112,37 @@ export async function renameStage(supabase: TypedClient, stageId: string, name: 
   if (error) throw error;
 }
 
+export async function addStage(
+  supabase: TypedClient,
+  pipelineId: string,
+  name: string,
+  position: number
+): Promise<Stage> {
+  const { data, error } = await supabase
+    .from("pipeline_stages")
+    .insert({ pipeline_id: pipelineId, name, position, is_won: false })
+    .select("id, pipeline_id, name, position, is_won")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteStage(
+  supabase: TypedClient,
+  stageId: string,
+  moveOpportunitiesTo: string | null
+) {
+  if (moveOpportunitiesTo) {
+    const { error: moveError } = await supabase
+      .from("opportunities")
+      .update({ stage_id: moveOpportunitiesTo })
+      .eq("stage_id", stageId);
+    if (moveError) throw moveError;
+  }
+  const { error } = await supabase.from("pipeline_stages").delete().eq("id", stageId);
+  if (error) throw error;
+}
+
 export async function insertActivity(
   supabase: TypedClient,
   params: {

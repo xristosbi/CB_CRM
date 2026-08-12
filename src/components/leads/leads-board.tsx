@@ -7,7 +7,9 @@ import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createClient } from "@/lib/supabase/client";
 import {
+  addStage,
   createPipelineWithStages,
+  deleteStage,
   fetchContactSummary,
   insertActivity,
   renameStage,
@@ -15,6 +17,8 @@ import {
 } from "@/lib/queries/leads";
 import type { OpportunityCard, Pipeline, Stage } from "@/lib/types";
 import type { ActivityType } from "@/lib/database.types";
+import { AddStageColumn } from "./add-stage-column";
+import { DeleteStageDialog } from "./delete-stage-dialog";
 import { KanbanColumn } from "./kanban-column";
 import { NewPipelineDialog } from "./new-pipeline-dialog";
 import { QuickActivityDialog } from "./quick-activity-dialog";
@@ -40,6 +44,7 @@ export function LeadsBoard({
   const [quickType, setQuickType] = useState<Extract<ActivityType, "call" | "note"> | null>(
     null
   );
+  const [deleteTarget, setDeleteTarget] = useState<Stage | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -157,13 +162,14 @@ export function LeadsBoard({
     try {
       const supabase = createClient();
       await updateOpportunityStage(supabase, opportunityId, newStageId);
-      const fromName = stages.find((s) => s.id === previousStageId)?.name ?? "";
-      const toName = stages.find((s) => s.id === newStageId)?.name ?? "";
+      const fromName = stages.find((s) => s.id === previousStageId)?.name ?? "—";
+      const toName = stages.find((s) => s.id === newStageId)?.name ?? "—";
+      const pipelineName = pipelines.find((p) => p.id === current.pipeline_id)?.name ?? "";
       await insertActivity(supabase, {
         contact_id: current.contact_id,
         opportunity_id: opportunityId,
         type: "stage_change",
-        content: `${fromName} → ${toName}`,
+        content: `[${pipelineName}] Μετακινήθηκε από "${fromName}" σε "${toName}"`,
       });
     } catch {
       setOpportunities((prev) =>
@@ -220,6 +226,85 @@ export function LeadsBoard({
         setStages((prev) => prev.map((s) => (s.id === stageId ? { ...s, name: previous } : s)));
       }
       toast.error("Η μετονομασία απέτυχε.");
+    }
+  }
+
+  async function handleAddStage(name: string) {
+    const pipelineStages = stages.filter((s) => s.pipeline_id === selectedPipelineId);
+    const position = pipelineStages.length
+      ? Math.max(...pipelineStages.map((s) => s.position)) + 1
+      : 0;
+
+    if (usingMockData) {
+      setStages((prev) => [
+        ...prev,
+        {
+          id: `mock-${crypto.randomUUID()}`,
+          pipeline_id: selectedPipelineId,
+          name,
+          position,
+          is_won: false,
+        },
+      ]);
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const created = await addStage(supabase, selectedPipelineId, name, position);
+      setStages((prev) => [...prev, created]);
+    } catch {
+      toast.error("Δεν ήταν δυνατή η προσθήκη σταδίου.");
+    }
+  }
+
+  const deleteTargetOpportunityCount = deleteTarget
+    ? opportunities.filter((o) => o.stage_id === deleteTarget.id).length
+    : 0;
+  const deleteTargetNeighbor = deleteTarget
+    ? (() => {
+        const siblings = stages
+          .filter((s) => s.pipeline_id === deleteTarget.pipeline_id)
+          .sort((a, b) => a.position - b.position);
+        const index = siblings.findIndex((s) => s.id === deleteTarget.id);
+        return siblings[index - 1] ?? siblings[index + 1] ?? null;
+      })()
+    : null;
+
+  async function handleConfirmDeleteStage() {
+    if (!deleteTarget) return;
+    const canDelete = deleteTargetNeighbor !== null || deleteTargetOpportunityCount === 0;
+    if (!canDelete) {
+      setDeleteTarget(null);
+      return;
+    }
+
+    const affectedIds = opportunities
+      .filter((o) => o.stage_id === deleteTarget.id)
+      .map((o) => o.id);
+
+    try {
+      if (!usingMockData) {
+        const supabase = createClient();
+        await deleteStage(
+          supabase,
+          deleteTarget.id,
+          affectedIds.length > 0 ? (deleteTargetNeighbor?.id ?? null) : null
+        );
+      }
+      if (affectedIds.length > 0 && deleteTargetNeighbor) {
+        setOpportunities((prev) =>
+          prev.map((o) =>
+            o.stage_id === deleteTarget.id ? { ...o, stage_id: deleteTargetNeighbor.id } : o
+          )
+        );
+      }
+      setStages((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+      toast.success("Το στάδιο διαγράφηκε.");
+    } catch {
+      toast.error("Η διαγραφή απέτυχε.");
+    } finally {
+      setDeleteTarget(null);
     }
   }
 
@@ -294,16 +379,23 @@ export function LeadsBoard({
                   setQuickType("note");
                 }}
                 onRenameStage={handleRenameStage}
+                onDeleteStage={setDeleteTarget}
               />
             ))}
-            {stagesForPipeline.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Αυτό το pipeline δεν έχει στάδια ακόμα.
-              </p>
-            )}
+            {selectedPipelineId && <AddStageColumn onAdd={handleAddStage} />}
           </div>
         </DndContext>
       </div>
+
+      <DeleteStageDialog
+        target={deleteTarget}
+        opportunityCount={deleteTargetOpportunityCount}
+        neighborName={deleteTargetNeighbor?.name ?? null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        onConfirm={handleConfirmDeleteStage}
+      />
 
       <QuickActivityDialog
         target={quickTarget}
