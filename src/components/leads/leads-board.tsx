@@ -10,6 +10,7 @@ import {
   createPipelineWithStages,
   fetchContactSummary,
   insertActivity,
+  renameStage,
   updateOpportunityStage,
 } from "@/lib/queries/leads";
 import type { OpportunityCard, Pipeline, Stage } from "@/lib/types";
@@ -205,6 +206,23 @@ export function LeadsBoard({
     }
   }
 
+  async function handleRenameStage(stageId: string, name: string) {
+    const previous = stages.find((s) => s.id === stageId)?.name;
+    setStages((prev) => prev.map((s) => (s.id === stageId ? { ...s, name } : s)));
+
+    if (usingMockData) return;
+
+    try {
+      const supabase = createClient();
+      await renameStage(supabase, stageId, name);
+    } catch {
+      if (previous !== undefined) {
+        setStages((prev) => prev.map((s) => (s.id === stageId ? { ...s, name: previous } : s)));
+      }
+      toast.error("Η μετονομασία απέτυχε.");
+    }
+  }
+
   async function handleQuickActivitySubmit(content: string) {
     if (!quickTarget || !quickType) return;
     if (!content.trim()) {
@@ -275,6 +293,7 @@ export function LeadsBoard({
                   setQuickTarget(o);
                   setQuickType("note");
                 }}
+                onRenameStage={handleRenameStage}
               />
             ))}
             {stagesForPipeline.length === 0 && (

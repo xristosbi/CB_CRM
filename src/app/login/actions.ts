@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { hasSupabaseEnv } from "@/lib/supabase/env";
 
 export type LoginState = { error: string | null };
 
@@ -14,11 +15,19 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
     return { error: "Συμπλήρωσε email και κωδικό." };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (!hasSupabaseEnv()) {
+    return { error: "Το Supabase δεν έχει ρυθμιστεί ακόμα (λείπουν τα env vars)." };
+  }
 
-  if (error) {
-    return { error: "Λάθος email ή κωδικός." };
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      return { error: "Λάθος email ή κωδικός." };
+    }
+  } catch {
+    return { error: "Η σύνδεση με το Supabase απέτυχε. Δοκίμασε ξανά." };
   }
 
   redirect("/leads");

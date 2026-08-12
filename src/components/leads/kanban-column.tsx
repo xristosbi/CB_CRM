@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { OpportunityCard as OpportunityCardData, Stage } from "@/lib/types";
 import { OpportunityCard } from "./opportunity-card";
@@ -17,25 +19,80 @@ export function KanbanColumn({
   opportunities,
   onQuickCall,
   onQuickNote,
+  onRenameStage,
 }: {
   stage: Stage;
   opportunities: OpportunityCardData[];
   onQuickCall: (opportunity: OpportunityCardData) => void;
   onQuickNote: (opportunity: OpportunityCardData) => void;
+  onRenameStage: (stageId: string, name: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(stage.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function startEditing() {
+    setValue(stage.name);
+    setEditing(true);
+  }
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
 
   const total = opportunities.reduce((sum, o) => sum + (o.value ?? 0), 0);
+
+  function commit() {
+    const trimmed = value.trim();
+    setEditing(false);
+    if (trimmed && trimmed !== stage.name) {
+      onRenameStage(stage.id, trimmed);
+    } else {
+      setValue(stage.name);
+    }
+  }
 
   return (
     <div className="flex w-72 shrink-0 flex-col rounded-lg bg-muted/40">
       <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <h3 className="truncate text-sm font-semibold">{stage.name}</h3>
-          {stage.is_won && (
-            <span className="rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-medium text-success">
-              won
-            </span>
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <Input
+              ref={inputRef}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commit();
+                } else if (e.key === "Escape") {
+                  setValue(stage.name);
+                  setEditing(false);
+                }
+              }}
+              className="h-7 px-2 text-sm font-semibold"
+            />
+          ) : (
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={startEditing}
+                className="truncate rounded text-sm font-semibold hover:bg-accent/60"
+                title="Κλικ για επεξεργασία ονόματος"
+              >
+                {stage.name}
+              </button>
+              {stage.is_won && (
+                <span className="shrink-0 rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-medium text-success">
+                  won
+                </span>
+              )}
+            </div>
           )}
         </div>
         <span className="shrink-0 text-xs text-muted-foreground">

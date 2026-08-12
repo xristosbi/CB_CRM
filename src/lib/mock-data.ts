@@ -1,4 +1,11 @@
-import type { OpportunityCard, Pipeline, Stage } from "@/lib/types";
+import type {
+  ActivityEntry,
+  Contact,
+  FollowUpTask,
+  OpportunityCard,
+  Pipeline,
+  Stage,
+} from "@/lib/types";
 
 export const MOCK_PIPELINES: Pipeline[] = [
   { id: "pl-chatbot", name: "Chatbot" },
@@ -75,5 +82,122 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign: "SEO Organic",
     pipeline_id: "pl-reviews",
     stage_id: "pl-reviews-stage-0",
+  },
+  {
+    id: "opp-6",
+    contact_id: "c-1",
+    contact_name: "Γιώργος Παπαδόπουλος",
+    source: "Facebook Ads",
+    value: 1200,
+    campaign: "Cross-sell Voice",
+    pipeline_id: "pl-voice",
+    stage_id: "pl-voice-stage-0",
+  },
+];
+
+export const MOCK_CONTACTS: Contact[] = [
+  {
+    id: "c-1",
+    name: "Γιώργος Παπαδόπουλος",
+    phone: "+30 690 000 0001",
+    email: "giorgos@example.gr",
+    website: "https://example.gr",
+    source: "Facebook Ads",
+    tags: ["hot"],
+    created_at: "2026-07-20T09:00:00.000Z",
+  },
+  {
+    id: "c-2",
+    name: "Μαρία Ιωάννου",
+    phone: "+30 690 000 0002",
+    email: "maria@example.gr",
+    website: null,
+    source: "Referral",
+    tags: ["warm"],
+    created_at: "2026-07-22T10:30:00.000Z",
+  },
+  {
+    id: "c-3",
+    name: "Νίκος Αντωνίου",
+    phone: "+30 690 000 0003",
+    email: "nikos@example.gr",
+    website: "https://nikos-biz.gr",
+    source: "Google Ads",
+    tags: ["cold"],
+    created_at: "2026-07-25T14:15:00.000Z",
+  },
+  {
+    id: "c-4",
+    name: "Ελένη Δημητρίου",
+    phone: "+30 690 000 0004",
+    email: "eleni@example.gr",
+    website: null,
+    source: "Instagram",
+    tags: ["warm"],
+    created_at: "2026-08-01T11:00:00.000Z",
+  },
+  {
+    id: "c-5",
+    name: "Κώστας Βασιλείου",
+    phone: "+30 690 000 0005",
+    email: "kostas@example.gr",
+    website: "https://kostas-biz.gr",
+    source: "Website",
+    tags: ["hot"],
+    created_at: "2026-08-05T16:45:00.000Z",
+  },
+];
+
+export const MOCK_ACTIVITY: (ActivityEntry & { contact_id: string })[] = [
+  {
+    id: "act-1",
+    contact_id: "c-1",
+    opportunity_id: "opp-1",
+    type: "note",
+    content: "Πρώτη επικοινωνία, ενδιαφέρον για chatbot στο site.",
+    created_at: "2026-08-06T09:10:00.000Z",
+  },
+  {
+    id: "act-2",
+    contact_id: "c-1",
+    opportunity_id: "opp-1",
+    type: "stage_change",
+    content: "Νέο Lead → Επικοινωνία",
+    created_at: "2026-08-06T09:11:00.000Z",
+  },
+  {
+    id: "act-3",
+    contact_id: "c-1",
+    opportunity_id: "opp-1",
+    type: "call",
+    content: "Τηλεφωνική κλήση 12 λεπτά, θέλει demo την επόμενη εβδομάδα.",
+    created_at: "2026-08-08T13:00:00.000Z",
+  },
+  {
+    id: "act-4",
+    contact_id: "c-1",
+    opportunity_id: "opp-6",
+    type: "fathom_summary",
+    content: "Demo call: ενδιαφέρον για voice agent, follow-up σε 3 μέρες.",
+    created_at: "2026-08-10T17:30:00.000Z",
+  },
+];
+
+export const MOCK_TASKS: (FollowUpTask & { contact_id: string })[] = [
+  {
+    id: "task-1",
+    contact_id: "c-1",
+    title: "Follow-up κλήση",
+    due_at: "2026-08-14T10:00:00.000Z",
+    done: false,
+    created_at: "2026-08-08T13:05:00.000Z",
+  },
+  {
+    id: "task-2",
+    contact_id: "c-1",
+    title: "Αποστολή πρότασης τιμής",
+    due_at: "2026-08-16T10:00:00.000Z",
+    done: false,
+    created_at: "2026-08-10T17:35:00.000Z",
   },
 ];

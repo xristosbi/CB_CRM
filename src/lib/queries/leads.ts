@@ -107,6 +107,11 @@ export async function updateOpportunityStage(
   if (error) throw error;
 }
 
+export async function renameStage(supabase: TypedClient, stageId: string, name: string) {
+  const { error } = await supabase.from("pipeline_stages").update({ name }).eq("id", stageId);
+  if (error) throw error;
+}
+
 export async function insertActivity(
   supabase: TypedClient,
   params: {

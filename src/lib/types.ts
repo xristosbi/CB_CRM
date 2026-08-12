@@ -1,3 +1,5 @@
+import type { ActivityType } from "@/lib/database.types";
+
 export interface Pipeline {
   id: string;
   name: string;
@@ -20,4 +22,41 @@ export interface OpportunityCard {
   campaign: string | null;
   pipeline_id: string;
   stage_id: string;
+}
+
+export interface Contact {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  source: string | null;
+  tags: string[];
+  created_at: string;
+}
+
+export interface ContactOpportunity {
+  id: string;
+  pipeline_id: string;
+  pipeline_name: string;
+  stage_id: string;
+  stage_name: string;
+  value: number | null;
+  campaign: string | null;
+}
+
+export interface ActivityEntry {
+  id: string;
+  opportunity_id: string | null;
+  type: ActivityType;
+  content: string | null;
+  created_at: string;
+}
+
+export interface FollowUpTask {
+  id: string;
+  title: string;
+  due_at: string | null;
+  done: boolean;
+  created_at: string;
 }
