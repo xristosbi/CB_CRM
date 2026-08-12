@@ -1,8 +1,17 @@
 import { notFound } from "next/navigation";
 
 import { ContactDetailView } from "@/components/contacts/contact-detail-view";
-import { MOCK_ACTIVITY, MOCK_CONTACTS, MOCK_OPPORTUNITIES, MOCK_STAGES, MOCK_TASKS, MOCK_PIPELINES } from "@/lib/mock-data";
+import {
+  MOCK_ACTIVITY,
+  MOCK_CONTACTS,
+  MOCK_OPPORTUNITIES,
+  MOCK_PAYMENTS,
+  MOCK_STAGES,
+  MOCK_TASKS,
+  MOCK_PIPELINES,
+} from "@/lib/mock-data";
 import { fetchContactDetail } from "@/lib/queries/contacts";
+import { fetchPaymentsForContact } from "@/lib/queries/payments";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -32,6 +41,7 @@ export default async function ContactDetailPage({
     });
     const activity = MOCK_ACTIVITY.filter((a) => a.contact_id === id);
     const tasks = MOCK_TASKS.filter((t) => t.contact_id === id);
+    const payments = MOCK_PAYMENTS.filter((p) => p.contact_id === id);
 
     return (
       <ContactDetailView
@@ -39,13 +49,17 @@ export default async function ContactDetailPage({
         initialOpportunities={opportunities}
         initialActivity={activity}
         initialTasks={tasks}
+        initialPayments={payments}
         usingMockData
       />
     );
   }
 
   const supabase = await createClient();
-  const detail = await fetchContactDetail(supabase, id);
+  const [detail, payments] = await Promise.all([
+    fetchContactDetail(supabase, id),
+    fetchPaymentsForContact(supabase, id),
+  ]);
   if (!detail) notFound();
 
   return (
@@ -54,6 +68,7 @@ export default async function ContactDetailPage({
       initialOpportunities={detail.opportunities}
       initialActivity={detail.activity}
       initialTasks={detail.tasks}
+      initialPayments={payments}
       usingMockData={false}
     />
   );

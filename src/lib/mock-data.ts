@@ -3,6 +3,7 @@ import type {
   Contact,
   FollowUpTask,
   OpportunityCard,
+  Payment,
   Pipeline,
   Stage,
 } from "@/lib/types";
@@ -199,5 +200,48 @@ export const MOCK_TASKS: (FollowUpTask & { contact_id: string })[] = [
     due_at: "2026-08-16T10:00:00.000Z",
     done: false,
     created_at: "2026-08-10T17:35:00.000Z",
+  },
+];
+
+export const MOCK_PAYMENTS: Payment[] = [
+  {
+    id: "pay-1",
+    contact_id: "c-3",
+    contact_name: "Νίκος Αντωνίου",
+    amount: 1500,
+    status: "paid",
+    invoice_ref: "INV-2026-014",
+    notes: "Voice agent setup — πλήρης πληρωμή.",
+    created_at: "2026-08-05T09:00:00.000Z",
+  },
+  {
+    id: "pay-2",
+    contact_id: "c-5",
+    contact_name: "Κώστας Βασιλείου",
+    amount: 2200,
+    status: "paid",
+    invoice_ref: "INV-2026-015",
+    notes: null,
+    created_at: "2026-08-09T11:30:00.000Z",
+  },
+  {
+    id: "pay-3",
+    contact_id: "c-1",
+    contact_name: "Γιώργος Παπαδόπουλος",
+    amount: 900,
+    status: "pending",
+    invoice_ref: "INV-2026-016",
+    notes: "Αναμονή έγκρισης από τον πελάτη.",
+    created_at: "2026-08-11T15:20:00.000Z",
+  },
+  {
+    id: "pay-4",
+    contact_id: "c-2",
+    contact_name: "Μαρία Ιωάννου",
+    amount: 600,
+    status: "cancelled",
+    invoice_ref: null,
+    notes: "Ο πελάτης ακύρωσε το πακέτο.",
+    created_at: "2026-07-28T10:00:00.000Z",
   },
 ];

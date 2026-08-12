@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Phone, StickyNote, ArrowRightLeft } from "lucide-react";
+import { Bot, Phone, StickyNote, ArrowRightLeft, Euro } from "lucide-react";
 
 import type { ActivityEntry } from "@/lib/types";
 import type { ActivityType } from "@/lib/database.types";
@@ -10,6 +10,7 @@ const ICONS: Record<ActivityType, typeof Phone> = {
   note: StickyNote,
   stage_change: ArrowRightLeft,
   fathom_summary: Bot,
+  payment: Euro,
 };
 
 const LABELS: Record<ActivityType, string> = {
@@ -17,6 +18,7 @@ const LABELS: Record<ActivityType, string> = {
   note: "Σημείωση",
   stage_change: "Αλλαγή σταδίου",
   fathom_summary: "Fathom summary",
+  payment: "Πληρωμή",
 };
 
 const dateFormatter = new Intl.DateTimeFormat("el-GR", {

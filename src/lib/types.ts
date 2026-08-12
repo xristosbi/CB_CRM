@@ -1,4 +1,4 @@
-import type { ActivityType } from "@/lib/database.types";
+import type { ActivityType, PaymentStatus } from "@/lib/database.types";
 
 export interface Pipeline {
   id: string;
@@ -58,5 +58,16 @@ export interface FollowUpTask {
   title: string;
   due_at: string | null;
   done: boolean;
+  created_at: string;
+}
+
+export interface Payment {
+  id: string;
+  contact_id: string;
+  contact_name: string;
+  amount: number;
+  status: PaymentStatus;
+  invoice_ref: string | null;
+  notes: string | null;
   created_at: string;
 }

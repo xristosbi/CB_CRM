@@ -8,9 +8,16 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { addNote, addTask, setTaskDone } from "@/lib/queries/contacts";
 import { createClient } from "@/lib/supabase/client";
-import type { ActivityEntry, Contact, ContactOpportunity, FollowUpTask } from "@/lib/types";
+import type {
+  ActivityEntry,
+  Contact,
+  ContactOpportunity,
+  FollowUpTask,
+  Payment,
+} from "@/lib/types";
 import { AddTaskDialog } from "./add-task-dialog";
 import { ActivityFeed } from "./activity-feed";
+import { ContactPaymentsSection } from "./contact-payments-section";
 import { NotesPanel } from "./notes-panel";
 import { OpportunitiesList } from "./opportunities-list";
 import { TasksPanel } from "./tasks-panel";
@@ -20,12 +27,14 @@ export function ContactDetailView({
   initialOpportunities,
   initialActivity,
   initialTasks,
+  initialPayments,
   usingMockData,
 }: {
   contact: Contact;
   initialOpportunities: ContactOpportunity[];
   initialActivity: ActivityEntry[];
   initialTasks: FollowUpTask[];
+  initialPayments: Payment[];
   usingMockData: boolean;
 }) {
   const [activity, setActivity] = useState(initialActivity);
@@ -175,8 +184,14 @@ export function ContactDetailView({
           </section>
         </div>
 
-        <div className="lg:sticky lg:top-6">
+        <div className="flex flex-col gap-6 lg:sticky lg:top-6">
           <NotesPanel activity={activity} onAdd={handleAddNote} />
+          <ContactPaymentsSection
+            contactId={contact.id}
+            contactName={contact.name}
+            initialPayments={initialPayments}
+            usingMockData={usingMockData}
+          />
         </div>
       </div>
     </div>

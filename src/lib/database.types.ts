@@ -1,4 +1,4 @@
-export type ActivityType = "call" | "note" | "stage_change" | "fathom_summary";
+export type ActivityType = "call" | "note" | "stage_change" | "fathom_summary" | "payment";
 export type PaymentStatus = "pending" | "paid" | "cancelled";
 
 export interface Database {
