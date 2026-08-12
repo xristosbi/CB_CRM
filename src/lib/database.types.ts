@@ -209,6 +209,28 @@ export interface Database {
           },
         ];
       };
+      expenses: {
+        Row: {
+          id: string;
+          description: string;
+          amount: number;
+          category: string | null;
+          date: string;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          description: string;
+          amount: number;
+          category?: string | null;
+          date?: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["expenses"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

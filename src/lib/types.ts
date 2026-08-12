@@ -71,3 +71,13 @@ export interface Payment {
   notes: string | null;
   created_at: string;
 }
+
+export interface Expense {
+  id: string;
+  description: string;
+  amount: number;
+  category: string | null;
+  date: string;
+  notes: string | null;
+  created_at: string;
+}
