@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Globe, Mail, Phone } from "lucide-react";
+import { ArrowLeft, Globe, Mail, Pencil, Phone } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
-import { addNote, addTask, setTaskDone } from "@/lib/queries/contacts";
+import { Button } from "@/components/ui/button";
+import { addNote, addTask, setTaskDone, updateContactWithLog } from "@/lib/queries/contacts";
 import { createClient } from "@/lib/supabase/client";
 import type {
   ActivityEntry,
@@ -17,13 +18,25 @@ import type {
 } from "@/lib/types";
 import { AddTaskDialog } from "./add-task-dialog";
 import { ActivityFeed } from "./activity-feed";
+import { ContactDialog, type ContactFormValues } from "./contact-dialog";
 import { ContactPaymentsSection } from "./contact-payments-section";
 import { NotesPanel } from "./notes-panel";
 import { OpportunitiesList } from "./opportunities-list";
 import { TasksPanel } from "./tasks-panel";
 
+function contactChanged(previous: Contact, values: ContactFormValues) {
+  return (
+    previous.name !== values.name ||
+    (previous.phone ?? "") !== (values.phone ?? "") ||
+    (previous.email ?? "") !== (values.email ?? "") ||
+    (previous.website ?? "") !== (values.website ?? "") ||
+    (previous.source ?? "") !== (values.source ?? "") ||
+    [...previous.tags].sort().join(",") !== [...values.tags].sort().join(",")
+  );
+}
+
 export function ContactDetailView({
-  contact,
+  contact: initialContact,
   initialOpportunities,
   initialActivity,
   initialTasks,
@@ -37,8 +50,40 @@ export function ContactDetailView({
   initialPayments: Payment[];
   usingMockData: boolean;
 }) {
+  const [contact, setContact] = useState(initialContact);
   const [activity, setActivity] = useState(initialActivity);
   const [tasks, setTasks] = useState(initialTasks);
+  const [editOpen, setEditOpen] = useState(false);
+
+  async function handleUpdateContact(values: ContactFormValues) {
+    const changed = contactChanged(contact, values);
+    if (!changed) return;
+
+    if (usingMockData) {
+      setContact((prev) => ({ ...prev, ...values }));
+      toast.success("Τα στοιχεία ενημερώθηκαν (demo δεδομένα).");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const updated = await updateContactWithLog(supabase, contact.id, values, true);
+      setContact(updated);
+      setActivity((prev) => [
+        {
+          id: `local-${crypto.randomUUID()}`,
+          opportunity_id: null,
+          type: "note",
+          content: "Ενημερώθηκαν στοιχεία επικοινωνίας",
+          created_at: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+      toast.success("Τα στοιχεία ενημερώθηκαν.");
+    } catch {
+      toast.error("Η ενημέρωση απέτυχε.");
+    }
+  }
 
   async function handleAddNote(content: string) {
     if (usingMockData) {
@@ -120,7 +165,19 @@ export function ContactDetailView({
       </div>
 
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{contact.name}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">{contact.name}</h1>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            aria-label="Επεξεργασία στοιχείων επαφής"
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil className="size-3.5" />
+          </Button>
+        </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           {contact.phone && (
             <span className="inline-flex items-center gap-1.5">
@@ -194,6 +251,14 @@ export function ContactDetailView({
           />
         </div>
       </div>
+
+      <ContactDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        mode="edit"
+        contact={contact}
+        onSubmit={handleUpdateContact}
+      />
     </div>
   );
 }

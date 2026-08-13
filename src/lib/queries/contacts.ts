@@ -114,3 +114,93 @@ export async function setTaskDone(supabase: TypedClient, taskId: string, done: b
   const { error } = await supabase.from("tasks").update({ done }).eq("id", taskId);
   if (error) throw error;
 }
+
+export interface ContactInput {
+  name: string;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  source: string | null;
+  tags: string[];
+}
+
+const CONTACT_COLUMNS = "id, name, phone, email, website, source, tags, created_at";
+
+export async function createContact(
+  supabase: TypedClient,
+  input: ContactInput
+): Promise<Contact> {
+  const { data, error } = await supabase
+    .from("contacts")
+    .insert(input)
+    .select(CONTACT_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateContact(
+  supabase: TypedClient,
+  contactId: string,
+  input: ContactInput
+): Promise<Contact> {
+  const { data, error } = await supabase
+    .from("contacts")
+    .update(input)
+    .eq("id", contactId)
+    .select(CONTACT_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function createLead(
+  supabase: TypedClient,
+  contactInput: ContactInput,
+  opportunity: { pipeline_id: string; stage_id: string } | null
+): Promise<{ contact: Contact; opportunityId: string | null }> {
+  const contact = await createContact(supabase, contactInput);
+
+  let opportunityId: string | null = null;
+  if (opportunity) {
+    const { data: opp, error: oppError } = await supabase
+      .from("opportunities")
+      .insert({
+        contact_id: contact.id,
+        pipeline_id: opportunity.pipeline_id,
+        stage_id: opportunity.stage_id,
+      })
+      .select("id")
+      .single();
+    if (oppError) throw oppError;
+    opportunityId = opp.id;
+  }
+
+  const { error: activityError } = await supabase.from("activity_log").insert({
+    contact_id: contact.id,
+    opportunity_id: opportunityId,
+    type: "note" as ActivityType,
+    content: "Δημιουργήθηκε νέο lead",
+  });
+  if (activityError) throw activityError;
+
+  return { contact, opportunityId };
+}
+
+export async function updateContactWithLog(
+  supabase: TypedClient,
+  contactId: string,
+  input: ContactInput,
+  logChange: boolean
+): Promise<Contact> {
+  const contact = await updateContact(supabase, contactId, input);
+  if (logChange) {
+    const { error } = await supabase.from("activity_log").insert({
+      contact_id: contactId,
+      type: "note" as ActivityType,
+      content: "Ενημερώθηκαν στοιχεία επικοινωνίας",
+    });
+    if (error) throw error;
+  }
+  return contact;
+}

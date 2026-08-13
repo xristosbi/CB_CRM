@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ContactDialog, type ContactFormValues, type OpportunitySelection } from "@/components/contacts/contact-dialog";
+import { createLead } from "@/lib/queries/contacts";
 import { createClient } from "@/lib/supabase/client";
 import {
   addStage,
@@ -45,6 +48,7 @@ export function LeadsBoard({
     null
   );
   const [deleteTarget, setDeleteTarget] = useState<Stage | null>(null);
+  const [newLeadOpen, setNewLeadOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -214,6 +218,56 @@ export function LeadsBoard({
     }
   }
 
+  async function handleCreateLead(
+    values: ContactFormValues,
+    opportunity: OpportunitySelection | null
+  ) {
+    if (usingMockData) {
+      if (opportunity) {
+        setOpportunities((prev) => [
+          {
+            id: `mock-${crypto.randomUUID()}`,
+            contact_id: `mock-${crypto.randomUUID()}`,
+            contact_name: values.name,
+            source: values.source,
+            value: null,
+            campaign: null,
+            pipeline_id: opportunity.pipeline_id,
+            stage_id: opportunity.stage_id,
+            created_at: new Date().toISOString(),
+          },
+          ...prev,
+        ]);
+      }
+      toast.success("Το lead δημιουργήθηκε (demo δεδομένα).");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const { contact, opportunityId } = await createLead(supabase, values, opportunity);
+      if (opportunity && opportunityId) {
+        setOpportunities((prev) => [
+          {
+            id: opportunityId,
+            contact_id: contact.id,
+            contact_name: contact.name,
+            source: contact.source,
+            value: null,
+            campaign: null,
+            pipeline_id: opportunity.pipeline_id,
+            stage_id: opportunity.stage_id,
+            created_at: new Date().toISOString(),
+          },
+          ...prev,
+        ]);
+      }
+      toast.success("Το lead δημιουργήθηκε.");
+    } catch {
+      toast.error("Δεν ήταν δυνατή η δημιουργία του lead.");
+    }
+  }
+
   async function handleRenameStage(stageId: string, name: string) {
     const previous = stages.find((s) => s.id === stageId)?.name;
     setStages((prev) => prev.map((s) => (s.id === stageId ? { ...s, name } : s)));
@@ -354,7 +408,12 @@ export function LeadsBoard({
             ))}
           </TabsList>
         </Tabs>
-        <NewPipelineDialog onCreate={handleCreatePipeline} />
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => setNewLeadOpen(true)}>
+            Νέο lead
+          </Button>
+          <NewPipelineDialog onCreate={handleCreatePipeline} />
+        </div>
       </div>
 
       {usingMockData && (
@@ -409,6 +468,16 @@ export function LeadsBoard({
           }
         }}
         onSubmit={handleQuickActivitySubmit}
+      />
+
+      <ContactDialog
+        open={newLeadOpen}
+        onOpenChange={setNewLeadOpen}
+        mode="create"
+        pipelines={pipelines}
+        stages={stages}
+        defaultPipelineId={selectedPipelineId}
+        onSubmit={handleCreateLead}
       />
     </div>
   );
