@@ -6,6 +6,7 @@ import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recha
 import { CATEGORICAL_COLORS, OTHER_COLOR, TOOLTIP_CONTENT_STYLE } from "@/lib/chart-colors";
 import type { OpportunityCard, Stage } from "@/lib/types";
 import { ChartCard, ChartEmptyState } from "./chart-card";
+import { useChartPalette } from "./use-chart-palette";
 
 export function StagePieChart({
   opportunities,
@@ -38,6 +39,7 @@ export function StagePieChart({
   }, [opportunities, stages]);
 
   const total = data.reduce((sum, d) => sum + d.value, 0);
+  const palette = useChartPalette();
 
   return (
     <ChartCard title="Opportunities ανά στάδιο">
@@ -55,7 +57,7 @@ export function StagePieChart({
               innerRadius={58}
               outerRadius={98}
               paddingAngle={2}
-              stroke="#fcfcfb"
+              stroke={palette.surface}
               strokeWidth={2}
             >
               {data.map((entry) => (

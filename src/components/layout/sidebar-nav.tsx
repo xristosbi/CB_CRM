@@ -40,7 +40,7 @@ export function SidebarNav({
                 "flex items-center gap-3 rounded-r-md border-l-2 px-3 py-2 text-sm font-medium transition-colors",
                 active
                   ? "border-brand-gold bg-brand-gold/12 text-brand-gold"
-                  : "border-transparent text-sidebar-foreground/70 hover:bg-white/5 hover:text-brand-gold"
+                  : "border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-brand-gold"
               )}
             >
               <Icon className="size-4 shrink-0" />
@@ -57,7 +57,7 @@ export function SidebarNav({
         <form action={logout}>
           <button
             type="submit"
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-white/5 hover:text-brand-gold"
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-brand-gold"
           >
             <LogOut className="size-4 shrink-0" />
             Αποσύνδεση

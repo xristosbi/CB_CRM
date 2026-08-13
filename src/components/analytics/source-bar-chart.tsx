@@ -3,9 +3,10 @@
 import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { CHART_AXIS, CHART_GRID, SEQUENTIAL_BLUE, TOOLTIP_CONTENT_STYLE } from "@/lib/chart-colors";
+import { SEQUENTIAL_BLUE, TOOLTIP_CONTENT_STYLE } from "@/lib/chart-colors";
 import type { OpportunityCard } from "@/lib/types";
 import { ChartCard, ChartEmptyState } from "./chart-card";
+import { useChartPalette } from "./use-chart-palette";
 
 export function SourceBarChart({ opportunities }: { opportunities: OpportunityCard[] }) {
   const data = useMemo(() => {
@@ -20,6 +21,7 @@ export function SourceBarChart({ opportunities }: { opportunities: OpportunityCa
   }, [opportunities]);
 
   const height = Math.max(220, data.length * 40 + 40);
+  const palette = useChartPalette();
 
   return (
     <ChartCard title="Πηγή leads">
@@ -32,11 +34,11 @@ export function SourceBarChart({ opportunities }: { opportunities: OpportunityCa
             layout="vertical"
             margin={{ top: 8, right: 24, left: 8, bottom: 0 }}
           >
-            <CartesianGrid horizontal={false} stroke={CHART_GRID} />
+            <CartesianGrid horizontal={false} stroke={palette.grid} />
             <XAxis
               type="number"
               allowDecimals={false}
-              tick={{ fontSize: 11, fill: CHART_AXIS }}
+              tick={{ fontSize: 11, fill: palette.axis }}
               axisLine={false}
               tickLine={false}
             />
@@ -48,7 +50,7 @@ export function SourceBarChart({ opportunities }: { opportunities: OpportunityCa
               axisLine={false}
               tickLine={false}
             />
-            <Tooltip contentStyle={TOOLTIP_CONTENT_STYLE} cursor={{ fill: "rgba(11,11,11,0.04)" }} />
+            <Tooltip contentStyle={TOOLTIP_CONTENT_STYLE} cursor={{ fill: palette.cursor }} />
             <Bar
               dataKey="count"
               name="Leads"

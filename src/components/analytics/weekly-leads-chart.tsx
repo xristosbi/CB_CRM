@@ -4,9 +4,10 @@ import { useMemo } from "react";
 import { format, startOfWeek, subWeeks } from "date-fns";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { CHART_AXIS, CHART_GRID, SEQUENTIAL_BLUE, TOOLTIP_CONTENT_STYLE } from "@/lib/chart-colors";
+import { SEQUENTIAL_BLUE, TOOLTIP_CONTENT_STYLE } from "@/lib/chart-colors";
 import type { OpportunityCard } from "@/lib/types";
 import { ChartCard, ChartEmptyState } from "./chart-card";
+import { useChartPalette } from "./use-chart-palette";
 
 const WEEKS = 12;
 
@@ -28,6 +29,7 @@ export function WeeklyLeadsChart({ opportunities }: { opportunities: Opportunity
   }, [opportunities]);
 
   const total = data.reduce((sum, d) => sum + d.leads, 0);
+  const palette = useChartPalette();
 
   return (
     <ChartCard title="Νέα leads ανά εβδομάδα (12 εβδομάδες)">
@@ -36,24 +38,24 @@ export function WeeklyLeadsChart({ opportunities }: { opportunities: Opportunity
       ) : (
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke={CHART_GRID} />
+            <CartesianGrid vertical={false} stroke={palette.grid} />
             <XAxis
               dataKey="week"
-              tick={{ fontSize: 11, fill: CHART_AXIS }}
-              axisLine={{ stroke: CHART_GRID }}
+              tick={{ fontSize: 11, fill: palette.axis }}
+              axisLine={{ stroke: palette.grid }}
               tickLine={false}
               interval="preserveStartEnd"
             />
             <YAxis
               allowDecimals={false}
-              tick={{ fontSize: 11, fill: CHART_AXIS }}
+              tick={{ fontSize: 11, fill: palette.axis }}
               axisLine={false}
               tickLine={false}
               width={28}
             />
             <Tooltip
               contentStyle={TOOLTIP_CONTENT_STYLE}
-              cursor={{ fill: "rgba(11,11,11,0.04)" }}
+              cursor={{ fill: palette.cursor }}
               labelFormatter={(label) => `Εβδομάδα ${label}`}
             />
             <Bar dataKey="leads" name="Leads" fill={SEQUENTIAL_BLUE} radius={[4, 4, 0, 0]} maxBarSize={24} />

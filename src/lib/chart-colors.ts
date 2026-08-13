@@ -26,6 +26,14 @@ export const CHART_AXIS = "#c3c2b7";
 export const CHART_MUTED_TEXT = "#898781";
 export const CHART_SURFACE = "#fcfcfb";
 
+// Dark-mode counterparts for chart chrome (grid/axis/surface/hover cursor).
+// Categorical + sequential series colors stay identical across themes.
+export const CHART_GRID_DARK = "#3f3f3f";
+export const CHART_AXIS_DARK = "#8a8a8a";
+export const CHART_SURFACE_DARK = "#262626";
+export const CHART_CURSOR_LIGHT = "rgba(11,11,11,0.04)";
+export const CHART_CURSOR_DARK = "rgba(255,255,255,0.06)";
+
 export function categoricalColor(index: number): string {
   return CATEGORICAL_COLORS[index] ?? OTHER_COLOR;
 }
