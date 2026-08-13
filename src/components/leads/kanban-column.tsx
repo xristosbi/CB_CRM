@@ -27,6 +27,8 @@ export function KanbanColumn({
   opportunities,
   onQuickCall,
   onQuickNote,
+  onEditOpportunity,
+  onDeleteOpportunity,
   onRenameStage,
   onDeleteStage,
 }: {
@@ -34,6 +36,8 @@ export function KanbanColumn({
   opportunities: OpportunityCardData[];
   onQuickCall: (opportunity: OpportunityCardData) => void;
   onQuickNote: (opportunity: OpportunityCardData) => void;
+  onEditOpportunity: (opportunity: OpportunityCardData) => void;
+  onDeleteOpportunity: (opportunity: OpportunityCardData) => void;
   onRenameStage: (stageId: string, name: string) => void;
   onDeleteStage: (stage: Stage) => void;
 }) {
@@ -148,6 +152,8 @@ export function KanbanColumn({
             opportunity={opportunity}
             onQuickCall={onQuickCall}
             onQuickNote={onQuickNote}
+            onEdit={onEditOpportunity}
+            onDelete={onDeleteOpportunity}
           />
         ))}
         {opportunities.length === 0 && (

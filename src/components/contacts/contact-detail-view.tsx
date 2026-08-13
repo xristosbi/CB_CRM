@@ -2,12 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Globe, Mail, Pencil, Phone } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Globe, Mail, Pencil, Phone, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { addNote, addTask, setTaskDone, updateContactWithLog } from "@/lib/queries/contacts";
+import {
+  addNote,
+  addTask,
+  deleteActivityEntry,
+  deleteContact,
+  setTaskDone,
+  updateActivityContent,
+  updateContactWithLog,
+} from "@/lib/queries/contacts";
 import { createClient } from "@/lib/supabase/client";
 import type {
   ActivityEntry,
@@ -20,6 +29,7 @@ import { AddTaskDialog } from "./add-task-dialog";
 import { ActivityFeed } from "./activity-feed";
 import { ContactDialog, type ContactFormValues } from "./contact-dialog";
 import { ContactPaymentsSection } from "./contact-payments-section";
+import { DeleteContactDialog } from "./delete-contact-dialog";
 import { NotesPanel } from "./notes-panel";
 import { OpportunitiesList } from "./opportunities-list";
 import { TasksPanel } from "./tasks-panel";
@@ -50,10 +60,12 @@ export function ContactDetailView({
   initialPayments: Payment[];
   usingMockData: boolean;
 }) {
+  const router = useRouter();
   const [contact, setContact] = useState(initialContact);
   const [activity, setActivity] = useState(initialActivity);
   const [tasks, setTasks] = useState(initialTasks);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteContactOpen, setDeleteContactOpen] = useState(false);
 
   async function handleUpdateContact(values: ContactFormValues) {
     const changed = contactChanged(contact, values);
@@ -152,6 +164,61 @@ export function ContactDetailView({
     }
   }
 
+  async function handleEditActivityEntry(id: string, content: string) {
+    const previous = activity.find((a) => a.id === id)?.content ?? null;
+    setActivity((prev) => prev.map((a) => (a.id === id ? { ...a, content } : a)));
+
+    if (usingMockData) {
+      toast.success("Ενημερώθηκε (demo δεδομένα).");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      await updateActivityContent(supabase, id, content);
+      toast.success("Ενημερώθηκε.");
+    } catch {
+      setActivity((prev) => prev.map((a) => (a.id === id ? { ...a, content: previous } : a)));
+      toast.error("Η ενημέρωση απέτυχε.");
+    }
+  }
+
+  async function handleDeleteActivityEntry(id: string) {
+    const previous = activity;
+    setActivity((prev) => prev.filter((a) => a.id !== id));
+
+    if (usingMockData) {
+      toast.success("Διαγράφηκε (demo δεδομένα).");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      await deleteActivityEntry(supabase, id);
+      toast.success("Διαγράφηκε.");
+    } catch {
+      setActivity(previous);
+      toast.error("Η διαγραφή απέτυχε.");
+    }
+  }
+
+  async function handleDeleteContact() {
+    if (usingMockData) {
+      toast.success("Ο πελάτης διαγράφηκε (demo δεδομένα).");
+      router.push("/contacts");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      await deleteContact(supabase, contact.id);
+      toast.success("Ο πελάτης διαγράφηκε.");
+      router.push("/contacts");
+    } catch {
+      toast.error("Η διαγραφή απέτυχε.");
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div>
@@ -176,6 +243,16 @@ export function ContactDetailView({
             onClick={() => setEditOpen(true)}
           >
             <Pencil className="size-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7 text-destructive hover:text-destructive"
+            aria-label="Διαγραφή πελάτη"
+            onClick={() => setDeleteContactOpen(true)}
+          >
+            <Trash2 className="size-3.5" />
           </Button>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -236,13 +313,22 @@ export function ContactDetailView({
           <section>
             <h2 className="text-sm font-semibold text-muted-foreground">Activity</h2>
             <div className="mt-3">
-              <ActivityFeed activity={activity} />
+              <ActivityFeed
+                activity={activity}
+                onEdit={handleEditActivityEntry}
+                onDelete={handleDeleteActivityEntry}
+              />
             </div>
           </section>
         </div>
 
         <div className="flex flex-col gap-6 lg:sticky lg:top-6">
-          <NotesPanel activity={activity} onAdd={handleAddNote} />
+          <NotesPanel
+            activity={activity}
+            onAdd={handleAddNote}
+            onEdit={handleEditActivityEntry}
+            onDelete={handleDeleteActivityEntry}
+          />
           <ContactPaymentsSection
             contactId={contact.id}
             contactName={contact.name}
@@ -258,6 +344,13 @@ export function ContactDetailView({
         mode="edit"
         contact={contact}
         onSubmit={handleUpdateContact}
+      />
+
+      <DeleteContactDialog
+        open={deleteContactOpen}
+        contactName={contact.name}
+        onOpenChange={setDeleteContactOpen}
+        onConfirm={handleDeleteContact}
       />
     </div>
   );

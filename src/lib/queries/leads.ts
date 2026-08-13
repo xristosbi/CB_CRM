@@ -145,6 +145,32 @@ export async function deleteStage(
   if (error) throw error;
 }
 
+export async function updateOpportunity(
+  supabase: TypedClient,
+  opportunityId: string,
+  input: { value: number | null; campaign: string | null }
+) {
+  const { error } = await supabase.from("opportunities").update(input).eq("id", opportunityId);
+  if (error) throw error;
+}
+
+export async function deleteOpportunity(
+  supabase: TypedClient,
+  opportunity: { id: string; contact_id: string; pipeline_id: string; stage_id: string },
+  pipelineName: string,
+  stageName: string
+) {
+  const { error } = await supabase.from("opportunities").delete().eq("id", opportunity.id);
+  if (error) throw error;
+
+  const { error: activityError } = await supabase.from("activity_log").insert({
+    contact_id: opportunity.contact_id,
+    type: "note" as ActivityType,
+    content: `Διαγράφηκε opportunity: ${pipelineName} / ${stageName}`,
+  });
+  if (activityError) throw activityError;
+}
+
 export async function insertActivity(
   supabase: TypedClient,
   params: {

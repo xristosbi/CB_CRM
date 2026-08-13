@@ -12,16 +12,20 @@ import { createClient } from "@/lib/supabase/client";
 import {
   addStage,
   createPipelineWithStages,
+  deleteOpportunity,
   deleteStage,
   fetchContactSummary,
   insertActivity,
   renameStage,
+  updateOpportunity,
   updateOpportunityStage,
 } from "@/lib/queries/leads";
 import type { OpportunityCard, Pipeline, Stage } from "@/lib/types";
 import type { ActivityType } from "@/lib/database.types";
 import { AddStageColumn } from "./add-stage-column";
+import { DeleteOpportunityDialog } from "./delete-opportunity-dialog";
 import { DeleteStageDialog } from "./delete-stage-dialog";
+import { EditOpportunityDialog } from "./edit-opportunity-dialog";
 import { KanbanColumn } from "./kanban-column";
 import { NewPipelineDialog } from "./new-pipeline-dialog";
 import { QuickActivityDialog } from "./quick-activity-dialog";
@@ -48,6 +52,10 @@ export function LeadsBoard({
     null
   );
   const [deleteTarget, setDeleteTarget] = useState<Stage | null>(null);
+  const [editOpportunityTarget, setEditOpportunityTarget] = useState<OpportunityCard | null>(null);
+  const [deleteOpportunityTarget, setDeleteOpportunityTarget] = useState<OpportunityCard | null>(
+    null
+  );
   const [newLeadOpen, setNewLeadOpen] = useState(false);
 
   const sensors = useSensors(
@@ -396,6 +404,50 @@ export function LeadsBoard({
     }
   }
 
+  async function handleEditOpportunitySave(values: { value: number | null; campaign: string | null }) {
+    if (!editOpportunityTarget) return;
+    const targetId = editOpportunityTarget.id;
+
+    setOpportunities((prev) =>
+      prev.map((o) => (o.id === targetId ? { ...o, ...values } : o))
+    );
+
+    if (usingMockData) return;
+
+    try {
+      const supabase = createClient();
+      await updateOpportunity(supabase, targetId, values);
+    } catch {
+      toast.error("Η ενημέρωση απέτυχε.");
+    }
+  }
+
+  async function handleDeleteOpportunityConfirm() {
+    if (!deleteOpportunityTarget) return;
+    const target = deleteOpportunityTarget;
+
+    setOpportunities((prev) => prev.filter((o) => o.id !== target.id));
+
+    if (usingMockData) {
+      setDeleteOpportunityTarget(null);
+      toast.success("Το lead διαγράφηκε (demo δεδομένα).");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const pipelineName = pipelines.find((p) => p.id === target.pipeline_id)?.name ?? "";
+      const stageName = stages.find((s) => s.id === target.stage_id)?.name ?? "";
+      await deleteOpportunity(supabase, target, pipelineName, stageName);
+      toast.success("Το lead διαγράφηκε.");
+    } catch {
+      setOpportunities((prev) => [target, ...prev]);
+      toast.error("Η διαγραφή απέτυχε.");
+    } finally {
+      setDeleteOpportunityTarget(null);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
@@ -439,6 +491,8 @@ export function LeadsBoard({
                   setQuickTarget(o);
                   setQuickType("note");
                 }}
+                onEditOpportunity={setEditOpportunityTarget}
+                onDeleteOpportunity={setDeleteOpportunityTarget}
                 onRenameStage={handleRenameStage}
                 onDeleteStage={setDeleteTarget}
               />
@@ -478,6 +532,22 @@ export function LeadsBoard({
         stages={stages}
         defaultPipelineId={selectedPipelineId}
         onSubmit={handleCreateLead}
+      />
+
+      <EditOpportunityDialog
+        target={editOpportunityTarget}
+        onOpenChange={(open) => {
+          if (!open) setEditOpportunityTarget(null);
+        }}
+        onSave={handleEditOpportunitySave}
+      />
+
+      <DeleteOpportunityDialog
+        target={deleteOpportunityTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteOpportunityTarget(null);
+        }}
+        onConfirm={handleDeleteOpportunityConfirm}
       />
     </div>
   );

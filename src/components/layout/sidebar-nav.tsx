@@ -19,8 +19,12 @@ export function SidebarNav({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 items-center px-4">
-        <span className="text-lg font-semibold tracking-tight">CB CRM</span>
+      <div className="flex h-14 items-center gap-2.5 px-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/cb-logo.png" alt="" className="h-8 w-auto shrink-0" />
+        <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">
+          CB CRM
+        </span>
       </div>
 
       <nav className="flex-1 space-y-1 px-2">
@@ -33,10 +37,10 @@ export function SidebarNav({
               href={item.href}
               onClick={onNavigate}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-r-md border-l-2 px-3 py-2 text-sm font-medium transition-colors",
                 active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  ? "border-brand-gold bg-brand-gold/12 text-brand-gold"
+                  : "border-transparent text-sidebar-foreground/70 hover:bg-white/5 hover:text-brand-gold"
               )}
             >
               <Icon className="size-4 shrink-0" />
@@ -53,7 +57,7 @@ export function SidebarNav({
         <form action={logout}>
           <button
             type="submit"
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-white/5 hover:text-brand-gold"
           >
             <LogOut className="size-4 shrink-0" />
             Αποσύνδεση

@@ -204,3 +204,26 @@ export async function updateContactWithLog(
   }
   return contact;
 }
+
+export async function deleteContact(supabase: TypedClient, contactId: string): Promise<void> {
+  // FK cascades (opportunities, activity_log, tasks, payments) handle the rest.
+  const { error } = await supabase.from("contacts").delete().eq("id", contactId);
+  if (error) throw error;
+}
+
+export async function updateActivityContent(
+  supabase: TypedClient,
+  activityId: string,
+  content: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("activity_log")
+    .update({ content })
+    .eq("id", activityId);
+  if (error) throw error;
+}
+
+export async function deleteActivityEntry(supabase: TypedClient, activityId: string): Promise<void> {
+  const { error } = await supabase.from("activity_log").delete().eq("id", activityId);
+  if (error) throw error;
+}
