@@ -12,6 +12,7 @@ interface OpportunityRow {
   stage_id: string;
   value: number | null;
   campaign: string | null;
+  created_at: string;
   contacts: { name: string; source: string | null } | { name: string; source: string | null }[] | null;
 }
 
@@ -29,7 +30,7 @@ export async function fetchLeadsData(supabase: TypedClient): Promise<{
         .order("position", { ascending: true }),
       supabase
         .from("opportunities")
-        .select("id, contact_id, pipeline_id, stage_id, value, campaign, contacts(name, source)")
+        .select("id, contact_id, pipeline_id, stage_id, value, campaign, created_at, contacts(name, source)")
         .order("created_at", { ascending: false })
         .returns<OpportunityRow[]>(),
     ]);
@@ -52,6 +53,7 @@ export async function fetchLeadsData(supabase: TypedClient): Promise<{
         campaign: row.campaign,
         pipeline_id: row.pipeline_id,
         stage_id: row.stage_id,
+        created_at: row.created_at,
       };
     }),
   };

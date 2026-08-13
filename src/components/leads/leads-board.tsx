@@ -93,6 +93,7 @@ export function LeadsBoard({
             stage_id: string;
             value: number | null;
             campaign: string | null;
+            created_at: string;
           };
 
           setOpportunities((prev) => {
@@ -129,6 +130,7 @@ export function LeadsBoard({
                   campaign: row.campaign,
                   pipeline_id: row.pipeline_id,
                   stage_id: row.stage_id,
+                  created_at: row.created_at,
                 },
                 ...prev,
               ];

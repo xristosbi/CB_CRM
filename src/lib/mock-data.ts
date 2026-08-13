@@ -44,6 +44,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign: "Q3 FB Leads",
     pipeline_id: "pl-chatbot",
     stage_id: "pl-chatbot-stage-1",
+    created_at: "2026-08-06T09:00:00.000Z",
   },
   {
     id: "opp-2",
@@ -54,6 +55,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign: "Referral Program",
     pipeline_id: "pl-chatbot",
     stage_id: "pl-chatbot-stage-0",
+    created_at: "2026-08-10T10:00:00.000Z",
   },
   {
     id: "opp-3",
@@ -64,6 +66,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign: "Google Ads - Voice",
     pipeline_id: "pl-voice",
     stage_id: "pl-voice-stage-2",
+    created_at: "2026-07-22T14:00:00.000Z",
   },
   {
     id: "opp-4",
@@ -74,6 +77,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign: null,
     pipeline_id: "pl-chatbot",
     stage_id: "pl-chatbot-stage-3",
+    created_at: "2026-07-15T11:00:00.000Z",
   },
   {
     id: "opp-5",
@@ -84,6 +88,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign: "SEO Organic",
     pipeline_id: "pl-reviews",
     stage_id: "pl-reviews-stage-0",
+    created_at: "2026-08-11T16:00:00.000Z",
   },
   {
     id: "opp-6",
@@ -94,6 +99,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign: "Cross-sell Voice",
     pipeline_id: "pl-voice",
     stage_id: "pl-voice-stage-0",
+    created_at: "2026-06-25T08:30:00.000Z",
   },
 ];
 

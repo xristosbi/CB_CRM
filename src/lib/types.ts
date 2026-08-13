@@ -22,6 +22,7 @@ export interface OpportunityCard {
   campaign: string | null;
   pipeline_id: string;
   stage_id: string;
+  created_at: string;
 }
 
 export interface Contact {
