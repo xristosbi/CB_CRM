@@ -231,6 +231,32 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["expenses"]["Insert"]>;
         Relationships: [];
       };
+      lead_routing_rules: {
+        Row: {
+          id: string;
+          match_value: string;
+          pipeline_id: string;
+          is_default: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          match_value: string;
+          pipeline_id: string;
+          is_default?: boolean;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["lead_routing_rules"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "lead_routing_rules_pipeline_id_fkey";
+            columns: ["pipeline_id"];
+            isOneToOne: false;
+            referencedRelation: "pipelines";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

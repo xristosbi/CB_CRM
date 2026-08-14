@@ -6,6 +6,14 @@ import { hasSupabaseEnv } from "./env";
 const PUBLIC_PATHS = ["/login"];
 
 export async function updateSession(request: NextRequest) {
+  // Routes under /api (e.g. the Facebook Lead Ads webhook) are called
+  // server-to-server by third parties, not a logged-in browser session, and
+  // must never be redirected either way — they return JSON/plain text, not
+  // HTML pages. Any auth they need is handled inside the route itself.
+  if (request.nextUrl.pathname.startsWith("/api")) {
+    return NextResponse.next({ request });
+  }
+
   // Local/dev convenience: without Supabase configured there is no auth to
   // enforce, so let requests through untouched (pages fall back to demo data).
   if (!hasSupabaseEnv()) {
