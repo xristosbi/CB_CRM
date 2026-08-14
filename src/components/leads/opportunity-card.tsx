@@ -48,14 +48,14 @@ export function OpportunityCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "touch-none rounded-lg border bg-card p-3 shadow-sm",
+        "touch-none rounded-lg border bg-card p-2 shadow-sm",
         isDragging && "opacity-50"
       )}
     >
       <div className="flex items-start justify-between gap-1">
         <Link
           href={`/contacts/${opportunity.contact_id}`}
-          className="min-w-0 flex-1 text-sm font-medium hover:underline"
+          className="min-w-0 flex-1 text-sm leading-tight font-medium hover:underline"
         >
           <span className="block truncate">{opportunity.contact_name}</span>
         </Link>
@@ -101,40 +101,41 @@ export function OpportunityCard({
         </div>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {opportunity.source && (
-          <Badge variant="secondary" className="text-[11px]">
-            {opportunity.source}
-          </Badge>
-        )}
-        {opportunity.value != null && (
-          <span className="text-xs font-medium text-muted-foreground">
-            {currency.format(opportunity.value)}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-2 flex items-center gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          aria-label="Καταγραφή κλήσης"
-          onClick={() => onQuickCall(opportunity)}
-        >
-          <Phone className="size-3.5" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          aria-label="Προσθήκη σημείωσης"
-          onClick={() => onQuickNote(opportunity)}
-        >
-          <StickyNote className="size-3.5" />
-        </Button>
+      <div className="mt-1.5 flex items-center justify-between gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {opportunity.source && (
+            <Badge variant="secondary" className="text-[11px]">
+              {opportunity.source}
+            </Badge>
+          )}
+          {opportunity.value != null && (
+            <span className="text-xs font-medium text-muted-foreground">
+              {currency.format(opportunity.value)}
+            </span>
+          )}
+        </div>
+        <div className="-mr-1 flex shrink-0 items-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            aria-label="Καταγραφή κλήσης"
+            onClick={() => onQuickCall(opportunity)}
+          >
+            <Phone className="size-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            aria-label="Προσθήκη σημείωσης"
+            onClick={() => onQuickNote(opportunity)}
+          >
+            <StickyNote className="size-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
   );
