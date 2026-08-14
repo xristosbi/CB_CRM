@@ -18,6 +18,7 @@ import {
   updateContactWithLog,
 } from "@/lib/queries/contacts";
 import { createClient } from "@/lib/supabase/client";
+import { toHref } from "@/lib/utils";
 import type {
   ActivityEntry,
   Contact,
@@ -270,9 +271,9 @@ export function ContactDetailView({
           )}
           {contact.website && (
             <a
-              href={contact.website}
+              href={toHref(contact.website)}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 hover:text-foreground hover:underline"
             >
               <Globe className="size-3.5" />
