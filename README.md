@@ -145,6 +145,81 @@ webhook δεν το χάνει: φτιάχνει τον contact χωρίς oppor
 `fb-leads-webhook` project στο Vercel μπορεί να απενεργοποιηθεί ή να
 διαγραφεί — δεν λαμβάνει πια traffic από τη Meta.
 
+## Leads μέσω Make.com (προσωρινό, όσο εκκρεμεί το leads_retrieval permission)
+
+Το Meta App δεν έχει ακόμα εγκεκριμένο το `leads_retrieval` permission, οπότε
+το `/api/webhook/facebook-leads` (Meta → CRM απευθείας) δεν μπορεί να τρέξει
+ακόμα σε production. Μέχρι να εγκριθεί, τα leads περνάνε μέσα από το ήδη
+εγκεκριμένο Facebook Lead Ads connector του Make.com σαν ενδιάμεσο, και το
+Make καλεί ένα δεύτερο, απλούστερο route: `/api/webhook/make-lead`.
+
+Η λογική δρομολόγησης/dedup είναι ίδια με το άλλο endpoint (ίδιος πίνακας
+`lead_routing_rules`, ίδιο "μην χάσεις το lead" fallback) — η μόνη διαφορά
+είναι ότι εδώ δεν καλείται καθόλου το Graph API: το Make στέλνει το lead ήδη
+parsed, οπότε το route απλά διαβάζει το JSON body. Αν βρεθεί ήδη contact με
+ίδιο τηλέφωνο, ενημερώνονται name/email/website του αντί να μείνουν όπως
+ήταν (διαφορά από το `/facebook-leads`, που απλώς τον ξαναχρησιμοποιεί χωρίς
+update).
+
+### Env var
+
+```
+MAKE_WEBHOOK_SECRET=...
+```
+
+Διάλεξε οποιοδήποτε τυχαίο string, βάλ' το στο Vercel, και το ίδιο string
+σαν header value στο Make HTTP module (βήματα παρακάτω).
+
+### Στήσιμο στο Make
+
+Σενάριο 2 modules: **Facebook Lead Ads → Watch Leads** (trigger, module 1)
+→ **Facebook Lead Ads → Get a Lead** (module 2, παίρνει τα πλήρη στοιχεία
+από το `leadgen_id` του module 1) → **HTTP → Make a request** (module 3).
+
+Στο module 3 (HTTP):
+
+- **URL**: `https://<crm-domain>/api/webhook/make-lead`
+- **Method**: `POST`
+- **Headers**: `x-make-secret` = η ίδια τιμή με το `MAKE_WEBHOOK_SECRET`
+- **Body type**: JSON (raw)
+- **Request content**:
+
+```json
+{
+  "name": "{{2.full_name}}",
+  "email": "{{2.email}}",
+  "phone": "{{2.phone_number}}",
+  "website": "{{2.website}}",
+  "ad_name": "{{2.ad_name}}",
+  "campaign_name": "{{2.campaign_name}}",
+  "created_time": "{{2.created_time}}"
+}
+```
+
+⚠️ Τα ονόματα μεταβλητών (`full_name`, `phone_number`, ...) είναι τα
+standard field keys που επιστρέφει το Facebook Lead Ads connector του Make
+για τα default πεδία μιας φόρμας — αλλά αν η φόρμα σου έχει custom
+ερωτήσεις (π.χ. άλλο key για website, ή διαφορετικά ονόματα), οι πραγματικές
+μεταβλητές μπορεί να διαφέρουν. Πριν το ενεργοποιήσεις, τρέξε το σενάριο
+μια φορά, άνοιξε το output του module 2 (**Get a Lead**) στο run history,
+και δες εκεί τα ακριβή ονόματα των πεδίων ώστε να τα αντιστοιχίσεις σωστά
+στο mapping του module 3 — απλώς σύρε το σωστό πεδίο από το output panel
+αντί να πληκτρολογήσεις το `{{2....}}` με το χέρι.
+
+Το response είναι πάντα `200` με `{"success": true, "contact_id": "...",
+"routed_to": "..."}` σε επιτυχία, ή `{"success": false, "reason": "..."}` αν
+κάτι δεν πήγε καλά (εκτός από λάθος `x-make-secret`, που γυρνάει `401`) —
+βάλε ένα Router μετά το HTTP module στο Make αν θες να κάνεις κάτι
+διαφορετικό (π.χ. Slack alert) όταν `success = false`.
+
+### Μετάβαση στο απευθείας Meta webhook
+
+Μόλις εγκριθεί το `leads_retrieval` permission από τη Meta, ακολούθησε τα
+βήματα της ενότητας "Αλλαγή του callback URL στο Meta App" παραπάνω για να
+συνδέσεις το `/api/webhook/facebook-leads` απευθείας, και μπορείς τότε να
+απενεργοποιήσεις το σενάριο στο Make (το `/api/webhook/make-lead` μπορεί να
+μείνει ανενεργό, δεν χρειάζεται να διαγραφεί).
+
 ## Notes
 
 - Τα shadcn/ui components στο `src/components/ui` γράφτηκαν χειροκίνητα (χωρίς

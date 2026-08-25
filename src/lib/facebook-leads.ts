@@ -195,6 +195,52 @@ export async function findPipelineName(
 }
 
 // ---------------------------------------------------------------------------
+// Routing resolution (shared by every lead source)
+// ---------------------------------------------------------------------------
+
+export interface ResolvedRouting {
+  pipelineId: string | null;
+  pipelineName: string | null;
+  stage: { id: string; name: string } | null;
+  routedBy: "rule" | "default" | "unrouted";
+}
+
+export async function resolveRouting(
+  supabase: TypedClient,
+  candidates: (string | null)[],
+  logContext: string
+): Promise<ResolvedRouting> {
+  const matchedRule = await findRoutingRule(supabase, candidates);
+  const defaultRule = matchedRule ? null : await findDefaultRule(supabase);
+  const rule = matchedRule ?? defaultRule;
+
+  let pipelineId: string | null = rule?.pipeline_id ?? null;
+  let routedBy: ResolvedRouting["routedBy"] = matchedRule ? "rule" : defaultRule ? "default" : "unrouted";
+
+  let stage: { id: string; name: string } | null = null;
+  let pipelineName: string | null = null;
+  if (pipelineId) {
+    [stage, pipelineName] = await Promise.all([
+      findFirstStage(supabase, pipelineId),
+      findPipelineName(supabase, pipelineId),
+    ]);
+    if (!stage) {
+      // Pipeline matched but has no stages — treat as unrouted rather than
+      // crash, same "don't lose the lead" principle as no default rule.
+      console.warn(`facebook-leads: pipeline ${pipelineId} has no stages, leaving ${logContext} unrouted`);
+      pipelineId = null;
+      routedBy = "unrouted";
+    }
+  } else {
+    console.warn(
+      `facebook-leads: no routing rule and no default rule for ${logContext} — creating contact without an opportunity`
+    );
+  }
+
+  return { pipelineId, pipelineName, stage, routedBy };
+}
+
+// ---------------------------------------------------------------------------
 // Contact dedup + lead creation
 // ---------------------------------------------------------------------------
 
@@ -212,6 +258,53 @@ export async function findContactByPhone(
   return data;
 }
 
+export interface ContactInput {
+  name: string;
+  phone: string | null;
+  email: string | null;
+  website?: string | null;
+  source: string;
+}
+
+// Dedupes by phone. When an existing contact matches and updateIfExists is
+// true, blank incoming fields never overwrite previously-known good data —
+// only non-empty values are patched in.
+export async function findOrCreateContact(
+  supabase: TypedClient,
+  input: ContactInput,
+  options: { updateIfExists: boolean }
+): Promise<{ contactId: string; contactCreated: boolean }> {
+  const existing = input.phone ? await findContactByPhone(supabase, input.phone) : null;
+
+  if (existing) {
+    if (options.updateIfExists) {
+      const patch: { name?: string; email?: string; website?: string } = {};
+      if (input.name) patch.name = input.name;
+      if (input.email) patch.email = input.email;
+      if (input.website) patch.website = input.website;
+      if (Object.keys(patch).length > 0) {
+        const { error } = await supabase.from("contacts").update(patch).eq("id", existing.id);
+        if (error) throw error;
+      }
+    }
+    return { contactId: existing.id, contactCreated: false };
+  }
+
+  const { data: contact, error } = await supabase
+    .from("contacts")
+    .insert({
+      name: input.name,
+      phone: input.phone,
+      email: input.email,
+      website: input.website ?? null,
+      source: input.source,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return { contactId: contact.id, contactCreated: true };
+}
+
 export interface CreateLeadFromFacebookResult {
   contactId: string;
   contactCreated: boolean;
@@ -222,6 +315,51 @@ export interface CreateLeadFromFacebookResult {
   campaignLabel: string | null;
 }
 
+// Creates the opportunity (if routed) and the activity_log entry describing
+// how the lead arrived. Shared by every lead source — only the note prefix
+// differs (e.g. "... (μέσω Make)").
+export async function createOpportunityAndLog(
+  supabase: TypedClient,
+  params: {
+    contactId: string;
+    routing: ResolvedRouting;
+    campaignLabel: string | null;
+    activityNotePrefix: string;
+  }
+): Promise<{ opportunityId: string | null }> {
+  let opportunityId: string | null = null;
+  if (params.routing.pipelineId && params.routing.stage) {
+    const { data: opp, error: oppError } = await supabase
+      .from("opportunities")
+      .insert({
+        contact_id: params.contactId,
+        pipeline_id: params.routing.pipelineId,
+        stage_id: params.routing.stage.id,
+        campaign: params.campaignLabel,
+      })
+      .select("id")
+      .single();
+    if (oppError) throw oppError;
+    opportunityId = opp.id;
+  }
+
+  const logSuffix = params.campaignLabel ? ` — καμπάνια: ${params.campaignLabel}` : "";
+  const logContent =
+    params.routing.routedBy === "unrouted"
+      ? `${params.activityNotePrefix}${logSuffix} (χωρίς pipeline — δεν βρέθηκε κανόνας δρομολόγησης)`
+      : `${params.activityNotePrefix}${logSuffix}`;
+
+  const { error: activityError } = await supabase.from("activity_log").insert({
+    contact_id: params.contactId,
+    opportunity_id: opportunityId,
+    type: "note" as ActivityType,
+    content: logContent,
+  });
+  if (activityError) throw activityError;
+
+  return { opportunityId };
+}
+
 export async function createLeadFromFacebook(
   supabase: TypedClient,
   lead: LeadDetails,
@@ -230,94 +368,73 @@ export async function createLeadFromFacebook(
   const { name, phone, email } = extractContactFields(lead.fields);
   const campaignLabel = lead.adName ?? formName ?? null;
 
-  const matchedRule = await findRoutingRule(supabase, [lead.adName, formName]);
-  const defaultRule = matchedRule ? null : await findDefaultRule(supabase);
-  const rule = matchedRule ?? defaultRule;
+  const routing = await resolveRouting(supabase, [lead.adName, formName], `leadgen ${lead.leadgenId}`);
 
-  let pipelineId: string | null = rule?.pipeline_id ?? null;
-  let routedBy: CreateLeadFromFacebookResult["routedBy"] = matchedRule
-    ? "rule"
-    : defaultRule
-      ? "default"
-      : "unrouted";
+  const { contactId, contactCreated } = await findOrCreateContact(
+    supabase,
+    { name, phone, email, source: "Facebook Ads" },
+    { updateIfExists: false }
+  );
 
-  let stage: { id: string; name: string } | null = null;
-  let pipelineName: string | null = null;
-  if (pipelineId) {
-    [stage, pipelineName] = await Promise.all([
-      findFirstStage(supabase, pipelineId),
-      findPipelineName(supabase, pipelineId),
-    ]);
-    if (!stage) {
-      // Pipeline matched but has no stages — treat as unrouted rather than
-      // crash, same "don't lose the lead" principle as no default rule.
-      console.warn(
-        `facebook-leads: pipeline ${pipelineId} has no stages, leaving lead ${lead.leadgenId} unrouted`
-      );
-      pipelineId = null;
-      routedBy = "unrouted";
-    }
-  } else {
-    console.warn(
-      `facebook-leads: no routing rule and no default rule for leadgen ${lead.leadgenId} (ad_name=${lead.adName ?? "—"}, form_name=${formName ?? "—"}) — creating contact without an opportunity`
-    );
-  }
-
-  let contactId: string;
-  let contactCreated: boolean;
-
-  const existing = phone ? await findContactByPhone(supabase, phone) : null;
-  if (existing) {
-    contactId = existing.id;
-    contactCreated = false;
-  } else {
-    const { data: contact, error: contactError } = await supabase
-      .from("contacts")
-      .insert({ name, phone, email, source: "Facebook Ads" })
-      .select("id")
-      .single();
-    if (contactError) throw contactError;
-    contactId = contact.id;
-    contactCreated = true;
-  }
-
-  let opportunityId: string | null = null;
-  if (pipelineId && stage) {
-    const { data: opp, error: oppError } = await supabase
-      .from("opportunities")
-      .insert({
-        contact_id: contactId,
-        pipeline_id: pipelineId,
-        stage_id: stage.id,
-        campaign: campaignLabel,
-      })
-      .select("id")
-      .single();
-    if (oppError) throw oppError;
-    opportunityId = opp.id;
-  }
-
-  const logSuffix = campaignLabel ? ` — καμπάνια: ${campaignLabel}` : "";
-  const logContent =
-    routedBy === "unrouted"
-      ? `Νέο lead από Facebook Ads${logSuffix} (χωρίς pipeline — δεν βρέθηκε κανόνας δρομολόγησης)`
-      : `Νέο lead από Facebook Ads${logSuffix}`;
-
-  const { error: activityError } = await supabase.from("activity_log").insert({
-    contact_id: contactId,
-    opportunity_id: opportunityId,
-    type: "note" as ActivityType,
-    content: logContent,
+  const { opportunityId } = await createOpportunityAndLog(supabase, {
+    contactId,
+    routing,
+    campaignLabel,
+    activityNotePrefix: "Νέο lead από Facebook Ads",
   });
-  if (activityError) throw activityError;
 
   return {
     contactId,
     contactCreated,
     opportunityId,
-    pipelineName,
-    stageName: stage?.name ?? null,
-    routedBy,
+    pipelineName: routing.pipelineName,
+    stageName: routing.stage?.name ?? null,
+    routedBy: routing.routedBy,
+    campaignLabel,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Make.com (Facebook Lead Ads module) — pre-parsed lead, no Graph API call
+// ---------------------------------------------------------------------------
+
+export interface MakeLeadInput {
+  name: string;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  adName: string | null;
+  campaignName: string | null;
+}
+
+export async function createLeadFromMake(
+  supabase: TypedClient,
+  input: MakeLeadInput
+): Promise<CreateLeadFromFacebookResult> {
+  const campaignLabel = input.adName ?? input.campaignName ?? null;
+
+  const routing = await resolveRouting(supabase, [input.adName, input.campaignName], "make-lead");
+
+  const { contactId, contactCreated } = await findOrCreateContact(
+    supabase,
+    { name: input.name, phone: input.phone, email: input.email, website: input.website, source: "Facebook Ads" },
+    { updateIfExists: true }
+  );
+
+  const { opportunityId } = await createOpportunityAndLog(supabase, {
+    contactId,
+    routing,
+    campaignLabel,
+    activityNotePrefix: "Νέο lead από Facebook Ads (μέσω Make)",
+  });
+
+  return {
+    contactId,
+    contactCreated,
+    opportunityId,
+    pipelineName: routing.pipelineName,
+    stageName: routing.stage?.name ?? null,
+    routedBy: routing.routedBy,
     campaignLabel,
   };
 }
