@@ -102,16 +102,35 @@ export async function updateOpportunityStage(
   opportunityId: string,
   stageId: string
 ) {
+  // .select().single() is deliberate: a plain .update().eq() with no
+  // matching row (e.g. blocked by RLS) succeeds with 0 rows affected and no
+  // error, so a caller-side rollback would never fire — .single() forces a
+  // real error when the update didn't actually touch the row.
   const { error } = await supabase
     .from("opportunities")
     .update({ stage_id: stageId })
-    .eq("id", opportunityId);
+    .eq("id", opportunityId)
+    .select("id")
+    .single();
   if (error) throw error;
 }
 
 export async function renameStage(supabase: TypedClient, stageId: string, name: string) {
   const { error } = await supabase.from("pipeline_stages").update({ name }).eq("id", stageId);
   if (error) throw error;
+}
+
+export async function reorderStages(
+  supabase: TypedClient,
+  updates: { id: string; position: number }[]
+) {
+  const results = await Promise.all(
+    updates.map(({ id, position }) =>
+      supabase.from("pipeline_stages").update({ position }).eq("id", id).select("id").single()
+    )
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
 }
 
 export async function addStage(

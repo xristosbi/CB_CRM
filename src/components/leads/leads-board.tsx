@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-kit/sortable";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -17,6 +25,7 @@ import {
   fetchContactSummary,
   insertActivity,
   renameStage,
+  reorderStages,
   updateOpportunity,
   updateOpportunityStage,
 } from "@/lib/queries/leads";
@@ -57,6 +66,7 @@ export function LeadsBoard({
     null
   );
   const [newLeadOpen, setNewLeadOpen] = useState(false);
+  const [activeDragType, setActiveDragType] = useState<"card" | "column" | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -158,9 +168,24 @@ export function LeadsBoard({
     };
   }, [usingMockData]);
 
-  async function handleDragEnd(event: DragEndEvent) {
+  function handleDragStart(event: DragStartEvent) {
+    const type = event.active.data.current?.type;
+    setActiveDragType(type === "column" ? "column" : "card");
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveDragType(null);
+    const type = event.active.data.current?.type;
+    if (type === "column") {
+      handleColumnDragEnd(event);
+    } else {
+      handleCardDragEnd(event);
+    }
+  }
+
+  async function handleCardDragEnd(event: DragEndEvent) {
     const opportunityId = event.active.id as string;
-    const newStageId = event.over?.id as string | undefined;
+    const newStageId = event.over?.data.current?.stageId as string | undefined;
     if (!newStageId) return;
 
     const current = opportunities.find((o) => o.id === opportunityId);
@@ -190,6 +215,35 @@ export function LeadsBoard({
         prev.map((o) => (o.id === opportunityId ? { ...o, stage_id: previousStageId } : o))
       );
       toast.error("Η ενημέρωση απέτυχε, δοκίμασε ξανά.");
+    }
+  }
+
+  async function handleColumnDragEnd(event: DragEndEvent) {
+    const activeStageId = event.active.id as string;
+    const overStageId = event.over?.id as string | undefined;
+    if (!overStageId || activeStageId === overStageId) return;
+
+    const oldIndex = stagesForPipeline.findIndex((s) => s.id === activeStageId);
+    const newIndex = stagesForPipeline.findIndex((s) => s.id === overStageId);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(stagesForPipeline, oldIndex, newIndex);
+    const updates = reordered.map((s, index) => ({ id: s.id, position: index }));
+    const updateById = new Map(updates.map((u) => [u.id, u.position]));
+
+    const previousStages = stages;
+    setStages((prev) =>
+      prev.map((s) => (updateById.has(s.id) ? { ...s, position: updateById.get(s.id)! } : s))
+    );
+
+    if (usingMockData) return;
+
+    try {
+      const supabase = createClient();
+      await reorderStages(supabase, updates);
+    } catch {
+      setStages(previousStages);
+      toast.error("Η αλλαγή σειράς απέτυχε, δοκίμασε ξανά.");
     }
   }
 
@@ -476,29 +530,41 @@ export function LeadsBoard({
       )}
 
       <div className="flex-1 overflow-x-auto p-4">
-        <DndContext id="leads-board-dnd" sensors={sensors} onDragEnd={handleDragEnd}>
-          <div className="flex h-full gap-3">
-            {stagesForPipeline.map((stage) => (
-              <KanbanColumn
-                key={stage.id}
-                stage={stage}
-                opportunities={opportunitiesByStage.get(stage.id) ?? []}
-                onQuickCall={(o) => {
-                  setQuickTarget(o);
-                  setQuickType("call");
-                }}
-                onQuickNote={(o) => {
-                  setQuickTarget(o);
-                  setQuickType("note");
-                }}
-                onEditOpportunity={setEditOpportunityTarget}
-                onDeleteOpportunity={setDeleteOpportunityTarget}
-                onRenameStage={handleRenameStage}
-                onDeleteStage={setDeleteTarget}
-              />
-            ))}
-            {selectedPipelineId && <AddStageColumn onAdd={handleAddStage} />}
-          </div>
+        <DndContext
+          id="leads-board-dnd"
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveDragType(null)}
+        >
+          <SortableContext
+            items={stagesForPipeline.map((s) => s.id)}
+            strategy={horizontalListSortingStrategy}
+          >
+            <div className="flex h-full gap-3">
+              {stagesForPipeline.map((stage) => (
+                <KanbanColumn
+                  key={stage.id}
+                  stage={stage}
+                  opportunities={opportunitiesByStage.get(stage.id) ?? []}
+                  activeDragType={activeDragType}
+                  onQuickCall={(o) => {
+                    setQuickTarget(o);
+                    setQuickType("call");
+                  }}
+                  onQuickNote={(o) => {
+                    setQuickTarget(o);
+                    setQuickType("note");
+                  }}
+                  onEditOpportunity={setEditOpportunityTarget}
+                  onDeleteOpportunity={setDeleteOpportunityTarget}
+                  onRenameStage={handleRenameStage}
+                  onDeleteStage={setDeleteTarget}
+                />
+              ))}
+              {selectedPipelineId && <AddStageColumn onAdd={handleAddStage} />}
+            </div>
+          </SortableContext>
         </DndContext>
       </div>
 

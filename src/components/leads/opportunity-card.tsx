@@ -36,7 +36,7 @@ export function OpportunityCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: opportunity.id,
-    data: { stageId: opportunity.stage_id },
+    data: { type: "card", stageId: opportunity.stage_id },
   });
 
   const style = transform

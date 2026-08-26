@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical, MoreVertical, Pencil, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +27,7 @@ const currency = new Intl.NumberFormat("el-GR", {
 export function KanbanColumn({
   stage,
   opportunities,
+  activeDragType,
   onQuickCall,
   onQuickNote,
   onEditOpportunity,
@@ -34,6 +37,7 @@ export function KanbanColumn({
 }: {
   stage: Stage;
   opportunities: OpportunityCardData[];
+  activeDragType: "card" | "column" | null;
   onQuickCall: (opportunity: OpportunityCardData) => void;
   onQuickNote: (opportunity: OpportunityCardData) => void;
   onEditOpportunity: (opportunity: OpportunityCardData) => void;
@@ -41,7 +45,31 @@ export function KanbanColumn({
   onRenameStage: (stageId: string, name: string) => void;
   onDeleteStage: (stage: Stage) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: stage.id });
+  // Column reordering (drag the whole stage) and card dropping (drag a lead
+  // into this stage) share one DndContext but must never both be "live"
+  // collision targets at once — a card hovering near the header could
+  // otherwise resolve against the column-sortable instead of the card zone.
+  // Disabling whichever one isn't the active drag type keeps them from
+  // fighting over the same pointer position.
+  const {
+    attributes: columnAttributes,
+    listeners: columnListeners,
+    setNodeRef: setColumnNodeRef,
+    transform: columnTransform,
+    transition: columnTransition,
+    isDragging: isColumnDragging,
+  } = useSortable({
+    id: stage.id,
+    data: { type: "column", stageId: stage.id },
+    disabled: activeDragType === "card",
+  });
+
+  const { setNodeRef: setCardZoneRef, isOver } = useDroppable({
+    id: `card-zone-${stage.id}`,
+    data: { type: "card-zone", stageId: stage.id },
+    disabled: activeDragType === "column",
+  });
+
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(stage.name);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -71,9 +99,28 @@ export function KanbanColumn({
   }
 
   return (
-    <div className="flex w-72 shrink-0 flex-col rounded-lg bg-muted/40">
+    <div
+      ref={setColumnNodeRef}
+      style={{
+        transform: CSS.Transform.toString(columnTransform),
+        transition: columnTransition,
+      }}
+      className={cn(
+        "flex w-72 shrink-0 flex-col rounded-lg bg-muted/40",
+        isColumnDragging && "opacity-50"
+      )}
+    >
       <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <button
+            type="button"
+            aria-label="Μετακίνηση στήλης"
+            className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent/60 active:cursor-grabbing"
+            {...columnAttributes}
+            {...columnListeners}
+          >
+            <GripVertical className="size-4" />
+          </button>
           {editing ? (
             <Input
               ref={inputRef}
@@ -140,7 +187,7 @@ export function KanbanColumn({
       )}
 
       <div
-        ref={setNodeRef}
+        ref={setCardZoneRef}
         className={cn(
           "flex min-h-24 flex-1 flex-col gap-2 px-2 pb-3 transition-colors",
           isOver && "bg-accent/60"
