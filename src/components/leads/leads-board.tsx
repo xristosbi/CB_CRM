@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   DndContext,
@@ -42,6 +42,30 @@ import { KanbanColumn } from "./kanban-column";
 import { NewPipelineDialog } from "./new-pipeline-dialog";
 import { QuickActivityDialog } from "./quick-activity-dialog";
 
+const PIPELINE_STORAGE_KEY = "crm:selected-pipeline";
+
+// Same useSyncExternalStore pattern as the theme toggle: reads localStorage
+// without a server/client hydration mismatch (getServerSnapshot returns ""
+// since there's no DOM on the server; getSnapshot reads the real value once
+// hydrated, and React reconciles the difference for us instead of us having
+// to setState from an effect).
+function subscribeToPipelineStorage(callback: () => void) {
+  window.addEventListener("storage", callback);
+  return () => window.removeEventListener("storage", callback);
+}
+
+function getStoredPipelineSnapshot(): string {
+  try {
+    return window.localStorage.getItem(PIPELINE_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function getStoredPipelineServerSnapshot(): string {
+  return "";
+}
+
 export function LeadsBoard(props: {
   initialPipelines: Pipeline[];
   initialStages: Stage[];
@@ -77,21 +101,57 @@ function LeadsBoardInner({
   const [stages, setStages] = useState(initialStages);
   const [opportunities, setOpportunities] = useState(initialOpportunities);
 
-  // Selection lives in the URL (?pipeline=<id>), not just component state,
-  // so it survives navigating away and back (browser back button, or a
-  // Link) instead of resetting to the first pipeline on every fresh mount.
+  const storedPipelineId = useSyncExternalStore(
+    subscribeToPipelineStorage,
+    getStoredPipelineSnapshot,
+    getStoredPipelineServerSnapshot
+  );
+
+  // Selection lives in the URL (?pipeline=<id>) first, so it survives
+  // browser back/forward, and falls back to localStorage so it also
+  // survives arriving via a plain link (e.g. the sidebar "Leads" item)
+  // that carries no query param — only when neither is present does it
+  // fall back to the first pipeline, same as before.
   const [selectedPipelineId, setSelectedPipelineIdState] = useState(() => {
     const fromUrl = searchParams.get("pipeline");
     if (fromUrl && initialPipelines.some((p) => p.id === fromUrl)) return fromUrl;
+    if (storedPipelineId && initialPipelines.some((p) => p.id === storedPipelineId)) {
+      return storedPipelineId;
+    }
     return initialPipelines[0]?.id ?? "";
   });
 
   function setSelectedPipelineId(id: string) {
     setSelectedPipelineIdState(id);
+    try {
+      window.localStorage.setItem(PIPELINE_STORAGE_KEY, id);
+    } catch {
+      // Storage unavailable (private browsing, quota, etc.) — the URL
+      // param still covers back/forward, just skip the extra fallback.
+    }
     const params = new URLSearchParams(searchParams.toString());
     params.set("pipeline", id);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
+
+  // If we resolved the initial selection from the URL, mirror it into
+  // localStorage too (a fresh arrival with ?pipeline= should still update
+  // the fallback for the *next* time there's no URL param to read).
+  useEffect(() => {
+    const fromUrl = searchParams.get("pipeline");
+    if (fromUrl && initialPipelines.some((p) => p.id === fromUrl)) {
+      try {
+        window.localStorage.setItem(PIPELINE_STORAGE_KEY, fromUrl);
+      } catch {
+        // Ignore — see setSelectedPipelineId above.
+      }
+    }
+    // Runs once per mount, deliberately: this only mirrors whatever the
+    // URL said *at load time* into storage, it's not meant to re-fire on
+    // every subsequent selectedPipelineId change (setSelectedPipelineId
+    // already writes storage directly for that).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [quickTarget, setQuickTarget] = useState<OpportunityCard | null>(null);
   const [quickType, setQuickType] = useState<Extract<ActivityType, "call" | "note"> | null>(
     null
