@@ -42,6 +42,7 @@ supabase/migrations/0001_init.sql
 supabase/migrations/0002_activity_payment_type.sql
 supabase/migrations/0003_expenses.sql
 supabase/migrations/0004_lead_routing_rules.sql
+supabase/migrations/0005_fix_opportunities_rls.sql
 ```
 
 Προαιρετικά, seed δεδομένα για local dev (`supabase db reset` τα τρέχει αυτόματα,

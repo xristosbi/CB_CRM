@@ -10,6 +10,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-kit/sortable";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContactDialog, type ContactFormValues, type OpportunitySelection } from "@/components/contacts/contact-dialog";
 import { createLead } from "@/lib/queries/contacts";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import {
   addStage,
   createPipelineWithStages,
@@ -67,6 +69,30 @@ export function LeadsBoard({
   );
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [activeDragType, setActiveDragType] = useState<"card" | "column" | null>(null);
+  const [dragBanner, setDragBanner] = useState<{ tone: "error" | "warning"; message: string } | null>(
+    null
+  );
+
+  // Drag failures need to stay visible until the user notices them, not
+  // vanish with a normal toast timeout — a reverted card is easy to miss
+  // otherwise. Shows both a non-expiring toast and a banner pinned above
+  // the board; only an explicit dismiss (or a later drag issue replacing
+  // it) clears the banner.
+  function reportDragIssue(message: string, tone: "error" | "warning" = "error") {
+    setDragBanner({ tone, message });
+    if (tone === "error") {
+      toast.error(message, { duration: Infinity });
+    } else {
+      toast.warning(message, { duration: Infinity });
+    }
+  }
+
+  function describeError(err: unknown): string {
+    if (err && typeof err === "object" && "message" in err && typeof err.message === "string") {
+      return err.message;
+    }
+    return "Άγνωστο σφάλμα.";
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -198,11 +224,29 @@ export function LeadsBoard({
 
     if (usingMockData) return;
 
+    const supabase = createClient();
+    const fromName = stages.find((s) => s.id === previousStageId)?.name ?? "—";
+    const toName = stages.find((s) => s.id === newStageId)?.name ?? "—";
+
+    // The DB write and the activity-log entry are handled as two separate
+    // steps on purpose: unlike a plain UPDATE (which can silently match 0
+    // rows under RLS with no error), an INSERT's RLS check always throws on
+    // rejection. Sharing one try/catch here would mean a failed activity
+    // log write rolls back a stage move that had already succeeded in the
+    // DB — misleading the user into thinking the move itself failed.
     try {
-      const supabase = createClient();
       await updateOpportunityStage(supabase, opportunityId, newStageId);
-      const fromName = stages.find((s) => s.id === previousStageId)?.name ?? "—";
-      const toName = stages.find((s) => s.id === newStageId)?.name ?? "—";
+    } catch (err) {
+      setOpportunities((prev) =>
+        prev.map((o) => (o.id === opportunityId ? { ...o, stage_id: previousStageId } : o))
+      );
+      reportDragIssue(
+        `Η μετακίνηση του "${current.contact_name}" από "${fromName}" σε "${toName}" απέτυχε — παρέμεινε στο "${fromName}". ${describeError(err)}`
+      );
+      return;
+    }
+
+    try {
       const pipelineName = pipelines.find((p) => p.id === current.pipeline_id)?.name ?? "";
       await insertActivity(supabase, {
         contact_id: current.contact_id,
@@ -210,11 +254,11 @@ export function LeadsBoard({
         type: "stage_change",
         content: `[${pipelineName}] Μετακινήθηκε από "${fromName}" σε "${toName}"`,
       });
-    } catch {
-      setOpportunities((prev) =>
-        prev.map((o) => (o.id === opportunityId ? { ...o, stage_id: previousStageId } : o))
+    } catch (err) {
+      reportDragIssue(
+        `Το "${current.contact_name}" μετακινήθηκε κανονικά σε "${toName}", αλλά δεν καταγράφηκε στο ιστορικό δραστηριότητας. ${describeError(err)}`,
+        "warning"
       );
-      toast.error("Η ενημέρωση απέτυχε, δοκίμασε ξανά.");
     }
   }
 
@@ -241,9 +285,9 @@ export function LeadsBoard({
     try {
       const supabase = createClient();
       await reorderStages(supabase, updates);
-    } catch {
+    } catch (err) {
       setStages(previousStages);
-      toast.error("Η αλλαγή σειράς απέτυχε, δοκίμασε ξανά.");
+      reportDragIssue(`Η αλλαγή σειράς στηλών απέτυχε, δοκίμασε ξανά. ${describeError(err)}`);
     }
   }
 
@@ -521,6 +565,28 @@ export function LeadsBoard({
           <NewPipelineDialog onCreate={handleCreatePipeline} />
         </div>
       </div>
+
+      {dragBanner && (
+        <div
+          role="alert"
+          className={cn(
+            "flex items-start justify-between gap-3 border-b px-4 py-2.5 text-sm font-medium",
+            dragBanner.tone === "error"
+              ? "bg-destructive/10 text-destructive"
+              : "bg-warning/15 text-warning-foreground"
+          )}
+        >
+          <p className="flex-1">{dragBanner.message}</p>
+          <button
+            type="button"
+            onClick={() => setDragBanner(null)}
+            aria-label="Κλείσιμο μηνύματος"
+            className="shrink-0 rounded p-0.5 opacity-70 hover:opacity-100"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
 
       {usingMockData && (
         <div className="border-b bg-warning/10 px-4 py-2 text-xs text-warning-foreground">
