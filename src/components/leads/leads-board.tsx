@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   DndContext,
   PointerSensor,
@@ -41,7 +42,23 @@ import { KanbanColumn } from "./kanban-column";
 import { NewPipelineDialog } from "./new-pipeline-dialog";
 import { QuickActivityDialog } from "./quick-activity-dialog";
 
-export function LeadsBoard({
+export function LeadsBoard(props: {
+  initialPipelines: Pipeline[];
+  initialStages: Stage[];
+  initialOpportunities: OpportunityCard[];
+  usingMockData: boolean;
+}) {
+  // useSearchParams() (used below to persist the selected pipeline tab in
+  // the URL) requires a Suspense boundary, or Next can't statically
+  // prerender the page it's used on.
+  return (
+    <Suspense>
+      <LeadsBoardInner {...props} />
+    </Suspense>
+  );
+}
+
+function LeadsBoardInner({
   initialPipelines,
   initialStages,
   initialOpportunities,
@@ -52,12 +69,29 @@ export function LeadsBoard({
   initialOpportunities: OpportunityCard[];
   usingMockData: boolean;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [pipelines, setPipelines] = useState(initialPipelines);
   const [stages, setStages] = useState(initialStages);
   const [opportunities, setOpportunities] = useState(initialOpportunities);
-  const [selectedPipelineId, setSelectedPipelineId] = useState(
-    initialPipelines[0]?.id ?? ""
-  );
+
+  // Selection lives in the URL (?pipeline=<id>), not just component state,
+  // so it survives navigating away and back (browser back button, or a
+  // Link) instead of resetting to the first pipeline on every fresh mount.
+  const [selectedPipelineId, setSelectedPipelineIdState] = useState(() => {
+    const fromUrl = searchParams.get("pipeline");
+    if (fromUrl && initialPipelines.some((p) => p.id === fromUrl)) return fromUrl;
+    return initialPipelines[0]?.id ?? "";
+  });
+
+  function setSelectedPipelineId(id: string) {
+    setSelectedPipelineIdState(id);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("pipeline", id);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
   const [quickTarget, setQuickTarget] = useState<OpportunityCard | null>(null);
   const [quickType, setQuickType] = useState<Extract<ActivityType, "call" | "note"> | null>(
     null
