@@ -57,6 +57,8 @@ export function CampaignDropdown({
   });
 
   const selected = campaigns.find((c) => c.id === selectedCampaignId) ?? null;
+  const triggerLabel =
+    selectedCampaignId === ALL_CAMPAIGNS_VALUE ? "Όλα" : (selected?.name ?? "—");
 
   useEffect(() => {
     if (editing) {
@@ -82,7 +84,7 @@ export function CampaignDropdown({
   const selectedCount = selected ? (campaignOpportunityCounts.get(selected.id) ?? 0) : 0;
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
       {editing ? (
         <Input
           ref={inputRef}
@@ -97,22 +99,58 @@ export function CampaignDropdown({
               setEditing(false);
             }
           }}
-          className="h-9 w-56"
+          className="h-9 w-full sm:w-56"
         />
       ) : (
         <Select value={selectedCampaignId} onValueChange={onSelect}>
-          <SelectTrigger className="w-56">
-            <SelectValue />
+          <SelectTrigger className="w-full overflow-hidden sm:w-auto sm:min-w-[160px] sm:max-w-[220px]">
+            {/* Radix's SelectValue drops any className passed to it and
+                renders a plain (non-flex) span, so flexbox min-width:0
+                shrinking never reaches it — truncation here is done with an
+                explicit inline-block + max-width instead, which clips and
+                ellipsizes regardless of the parent's layout context. */}
+            <SelectValue>
+              <span className="inline-block max-w-[160px] truncate align-middle">
+                {triggerLabel}
+              </span>
+              {selected?.is_active && (
+                <span
+                  className="ml-1.5 inline-block size-1.5 rounded-full bg-success align-middle"
+                  role="img"
+                  aria-label="Ενεργό campaign"
+                  title="Ενεργό campaign"
+                />
+              )}
+            </SelectValue>
           </SelectTrigger>
-          <SelectContent>
-            {sorted.map((campaign) => (
-              <SelectItem key={campaign.id} value={campaign.id}>
-                {campaign.name}
-                {campaign.is_active
-                  ? " (ενεργό)"
-                  : ` — ${dateFormatter.format(new Date(campaign.created_at))}`}
-              </SelectItem>
-            ))}
+          <SelectContent className="max-w-[300px]">
+            {sorted.map((campaign) => {
+              const fullLabel = campaign.is_active
+                ? `${campaign.name} (ενεργό)`
+                : `${campaign.name} — ${dateFormatter.format(new Date(campaign.created_at))}`;
+              return (
+                <SelectItem key={campaign.id} value={campaign.id} title={fullLabel}>
+                  {/* inline-block + max-width (not flex + min-w-0): Radix's
+                      ItemText wrapper blockifies as a flex item with its own
+                      default min-width:auto, which blocks a nested flex
+                      chain from ever shrinking — a hard max-width on the
+                      name itself sidesteps that regardless of ItemText's
+                      own layout. */}
+                  <span className="inline-block max-w-[180px] truncate align-middle">
+                    {campaign.name}
+                  </span>
+                  {campaign.is_active ? (
+                    <span className="ml-1.5 inline-block align-middle text-[11px] font-medium text-success">
+                      ενεργό
+                    </span>
+                  ) : (
+                    <span className="ml-1.5 inline-block align-middle text-[11px] text-muted-foreground">
+                      {dateFormatter.format(new Date(campaign.created_at))}
+                    </span>
+                  )}
+                </SelectItem>
+              );
+            })}
             <SelectItem value={ALL_CAMPAIGNS_VALUE}>Όλα</SelectItem>
           </SelectContent>
         </Select>

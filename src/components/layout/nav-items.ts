@@ -3,6 +3,7 @@ import {
   Calendar,
   CreditCard,
   KanbanSquare,
+  Megaphone,
   Settings,
   Users,
   type LucideIcon,
@@ -16,6 +17,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/leads", label: "Leads", icon: KanbanSquare },
+  { href: "/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/contacts", label: "Πελάτες", icon: Users },
   { href: "/calendar", label: "Ημερολόγιο", icon: Calendar },
   { href: "/payments", label: "Πληρωμές", icon: CreditCard },

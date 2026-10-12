@@ -18,16 +18,12 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContactDialog, type ContactFormValues, type OpportunitySelection } from "@/components/contacts/contact-dialog";
 import { DateRangeFilter } from "@/components/payments/date-range-filter";
+import { describeError } from "@/lib/errors";
+import { useCampaignActions } from "@/lib/hooks/use-campaign-actions";
 import { createLead } from "@/lib/queries/contacts";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import {
-  activateCampaign,
-  createCampaignAndActivate,
-  deleteCampaignIfEmpty,
-  ensureActiveCampaign,
-  renameCampaign,
-} from "@/lib/queries/campaigns";
+import { ensureActiveCampaign } from "@/lib/queries/campaigns";
 import {
   addStage,
   createPipelineWithStages,
@@ -105,6 +101,11 @@ export function LeadsBoard(props: {
   initialCampaigns: Campaign[];
   initialOpportunities: OpportunityCard[];
   usingMockData: boolean;
+  // Set by /campaigns/[id]: locks the board to a single pipeline+campaign
+  // (no pipeline tabs, no campaign switcher — that page's own header covers
+  // name/pipeline/stats, and "Άνοιγμα στο Leads" is the explicit escape
+  // hatch to the full, unlocked board).
+  lockedCampaignId?: string;
 }) {
   // useSearchParams() (used below to persist the selected pipeline/campaign
   // in the URL) requires a Suspense boundary, or Next can't statically
@@ -122,12 +123,14 @@ function LeadsBoardInner({
   initialCampaigns,
   initialOpportunities,
   usingMockData,
+  lockedCampaignId,
 }: {
   initialPipelines: Pipeline[];
   initialStages: Stage[];
   initialCampaigns: Campaign[];
   initialOpportunities: OpportunityCard[];
   usingMockData: boolean;
+  lockedCampaignId?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -150,6 +153,9 @@ function LeadsBoardInner({
   // sidebar "Leads" item) that carries no query param — only when neither
   // is present does it fall back to the first pipeline / active campaign.
   const [selectedPipelineId, setSelectedPipelineIdState] = useState(() => {
+    if (lockedCampaignId) {
+      return initialCampaigns.find((c) => c.id === lockedCampaignId)?.pipeline_id ?? "";
+    }
     const fromUrl = searchParams.get("pipeline");
     if (fromUrl && initialPipelines.some((p) => p.id === fromUrl)) return fromUrl;
     if (storedPipelineId && initialPipelines.some((p) => p.id === storedPipelineId)) {
@@ -165,6 +171,7 @@ function LeadsBoardInner({
   );
 
   const [selectedCampaignId, setSelectedCampaignIdState] = useState(() => {
+    if (lockedCampaignId) return lockedCampaignId;
     const fromUrl = searchParams.get("campaign");
     if (fromUrl === ALL_CAMPAIGNS_VALUE) return ALL_CAMPAIGNS_VALUE;
     if (fromUrl && initialCampaigns.some((c) => c.id === fromUrl && c.pipeline_id === selectedPipelineId)) {
@@ -201,6 +208,7 @@ function LeadsBoardInner({
   // a link that *does* carry the params still keeps the fallback current
   // for the next visit that doesn't.
   useEffect(() => {
+    if (lockedCampaignId) return;
     const fromUrlPipeline = searchParams.get("pipeline");
     const fromUrlCampaign = searchParams.get("campaign");
     if (fromUrlPipeline && initialPipelines.some((p) => p.id === fromUrlPipeline)) {
@@ -252,12 +260,8 @@ function LeadsBoardInner({
     }
   }
 
-  function describeError(err: unknown): string {
-    if (err && typeof err === "object" && "message" in err && typeof err.message === "string") {
-      return err.message;
-    }
-    return "Άγνωστο σφάλμα.";
-  }
+  const { createCampaign, activate: activateCampaignAction, rename: renameCampaignAction, remove: removeCampaignAction } =
+    useCampaignActions({ campaigns, setCampaigns, usingMockData, reportIssue });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -661,109 +665,23 @@ function LeadsBoardInner({
   // ---------------------------------------------------------------------
 
   async function handleCreateCampaign(name: string) {
-    if (usingMockData) {
-      const newCampaign: Campaign = {
-        id: `mock-campaign-${crypto.randomUUID()}`,
-        pipeline_id: selectedPipelineId,
-        name,
-        is_active: true,
-        created_at: new Date().toISOString(),
-      };
-      setCampaigns((prev) =>
-        prev
-          .map((c) => (c.pipeline_id === selectedPipelineId ? { ...c, is_active: false } : c))
-          .concat(newCampaign)
-      );
-      navigateTo(selectedPipelineId, newCampaign.id);
-      toast.success("Το campaign δημιουργήθηκε (demo δεδομένα).");
-      return;
-    }
-
-    try {
-      const supabase = createClient();
-      const created = await createCampaignAndActivate(supabase, selectedPipelineId, name);
-      setCampaigns((prev) =>
-        prev.map((c) => (c.pipeline_id === selectedPipelineId ? { ...c, is_active: false } : c)).concat(created)
-      );
-      navigateTo(selectedPipelineId, created.id);
-      toast.success("Το campaign δημιουργήθηκε.");
-    } catch (err) {
-      reportIssue(`Η δημιουργία campaign απέτυχε, τίποτα δεν άλλαξε. ${describeError(err)}`);
-    }
+    const created = await createCampaign(selectedPipelineId, name);
+    if (created) navigateTo(selectedPipelineId, created.id);
   }
 
   async function handleActivateCampaign(campaignId: string) {
-    if (usingMockData) {
-      setCampaigns((prev) =>
-        prev.map((c) => {
-          if (c.id === campaignId) return { ...c, is_active: true };
-          if (c.pipeline_id === selectedPipelineId) return { ...c, is_active: false };
-          return c;
-        })
-      );
-      toast.success("Το campaign ενεργοποιήθηκε (demo δεδομένα).");
-      return;
-    }
-
-    try {
-      const supabase = createClient();
-      const updated = await activateCampaign(supabase, campaignId);
-      setCampaigns((prev) =>
-        prev.map((c) => {
-          if (c.id === campaignId) return updated;
-          if (c.pipeline_id === updated.pipeline_id) return { ...c, is_active: false };
-          return c;
-        })
-      );
-      toast.success("Το campaign ενεργοποιήθηκε.");
-    } catch (err) {
-      reportIssue(`Η ενεργοποίηση campaign απέτυχε, τίποτα δεν άλλαξε. ${describeError(err)}`);
-    }
+    await activateCampaignAction(campaignId);
   }
 
   async function handleRenameCampaign(campaignId: string, name: string) {
-    const previous = campaigns.find((c) => c.id === campaignId)?.name;
-    setCampaigns((prev) => prev.map((c) => (c.id === campaignId ? { ...c, name } : c)));
-
-    if (usingMockData) return;
-
-    try {
-      const supabase = createClient();
-      await renameCampaign(supabase, campaignId, name);
-    } catch (err) {
-      if (previous !== undefined) {
-        setCampaigns((prev) => prev.map((c) => (c.id === campaignId ? { ...c, name: previous } : c)));
-      }
-      reportIssue(`Η μετονομασία campaign απέτυχε. ${describeError(err)}`);
-    }
+    await renameCampaignAction(campaignId, name);
   }
 
   async function handleDeleteCampaign(campaignId: string) {
     const count = campaignOpportunityCounts.get(campaignId) ?? 0;
-    if (count > 0) {
-      toast.error("Το campaign δεν είναι άδειο — δεν μπορεί να διαγραφεί.");
-      return;
-    }
-
-    if (usingMockData) {
-      setCampaigns((prev) => prev.filter((c) => c.id !== campaignId));
-      if (selectedCampaignId === campaignId) {
-        setSelectedCampaignId(ALL_CAMPAIGNS_VALUE);
-      }
-      toast.success("Το campaign διαγράφηκε (demo δεδομένα).");
-      return;
-    }
-
-    try {
-      const supabase = createClient();
-      await deleteCampaignIfEmpty(supabase, campaignId);
-      setCampaigns((prev) => prev.filter((c) => c.id !== campaignId));
-      if (selectedCampaignId === campaignId) {
-        setSelectedCampaignId(ALL_CAMPAIGNS_VALUE);
-      }
-      toast.success("Το campaign διαγράφηκε.");
-    } catch (err) {
-      reportIssue(`Η διαγραφή campaign απέτυχε. ${describeError(err)}`);
+    const deleted = await removeCampaignAction(campaignId, count);
+    if (deleted && selectedCampaignId === campaignId) {
+      setSelectedCampaignId(ALL_CAMPAIGNS_VALUE);
     }
   }
 
@@ -895,64 +813,66 @@ function LeadsBoardInner({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-col gap-3 border-b p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Tabs value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
-            <TabsList>
-              {pipelines.map((pipeline) => (
-                <TabsTrigger key={pipeline.id} value={pipeline.id}>
-                  {pipeline.name}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          <div className="flex items-center gap-2">
-            <Button size="sm" onClick={() => setNewLeadOpen(true)}>
-              Νέο lead
+      {!lockedCampaignId && (
+        <div className="flex flex-col gap-3 border-b p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Tabs value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
+              <TabsList>
+                {pipelines.map((pipeline) => (
+                  <TabsTrigger key={pipeline.id} value={pipeline.id}>
+                    {pipeline.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={() => setNewLeadOpen(true)}>
+                Νέο lead
+              </Button>
+              <NewPipelineDialog onCreate={handleCreatePipeline} />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <CampaignDropdown
+              campaigns={campaignsForPipeline}
+              selectedCampaignId={selectedCampaignId}
+              campaignOpportunityCounts={campaignOpportunityCounts}
+              onSelect={setSelectedCampaignId}
+              onRename={handleRenameCampaign}
+              onActivate={handleActivateCampaign}
+              onDelete={handleDeleteCampaign}
+              onNewCampaign={() => setNewCampaignOpen(true)}
+            />
+            {selectedCampaign && !selectedCampaign.is_active && (
+              <span className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning-foreground">
+                Παλιό campaign
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDateFilterOpen((prev) => !prev)}
+              className={cn(dateFilterOpen && "bg-accent")}
+            >
+              <CalendarRange className="size-4" />
+              Ημερομηνία
             </Button>
-            <NewPipelineDialog onCreate={handleCreatePipeline} />
+            {dateFilterOpen && (
+              <DateRangeFilter
+                preset={dateRangePreset}
+                customFrom={customFrom}
+                customTo={customTo}
+                onPresetChange={setDateRangePreset}
+                onCustomChange={(from, to) => {
+                  setCustomFrom(from);
+                  setCustomTo(to);
+                }}
+              />
+            )}
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <CampaignDropdown
-            campaigns={campaignsForPipeline}
-            selectedCampaignId={selectedCampaignId}
-            campaignOpportunityCounts={campaignOpportunityCounts}
-            onSelect={setSelectedCampaignId}
-            onRename={handleRenameCampaign}
-            onActivate={handleActivateCampaign}
-            onDelete={handleDeleteCampaign}
-            onNewCampaign={() => setNewCampaignOpen(true)}
-          />
-          {selectedCampaign && !selectedCampaign.is_active && (
-            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning-foreground">
-              Παλιό campaign
-            </span>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setDateFilterOpen((prev) => !prev)}
-            className={cn(dateFilterOpen && "bg-accent")}
-          >
-            <CalendarRange className="size-4" />
-            Ημερομηνία
-          </Button>
-          {dateFilterOpen && (
-            <DateRangeFilter
-              preset={dateRangePreset}
-              customFrom={customFrom}
-              customTo={customTo}
-              onPresetChange={setDateRangePreset}
-              onCustomChange={(from, to) => {
-                setCustomFrom(from);
-                setCustomTo(to);
-              }}
-            />
-          )}
-        </div>
-      </div>
+      )}
 
       {dragBanner && (
         <div
