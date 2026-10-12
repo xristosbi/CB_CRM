@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ActivityType, Database } from "@/lib/database.types";
-import type { ActivityEntry, Contact, ContactOpportunity, FollowUpTask } from "@/lib/types";
+import type { ActivityEntry, CalendarTaskEntry, Contact, ContactOpportunity, FollowUpTask } from "@/lib/types";
 
 type TypedClient = SupabaseClient<Database>;
 
@@ -88,6 +88,41 @@ export async function fetchContactDetail(
     activity: activity ?? [],
     tasks: tasks ?? [],
   };
+}
+
+interface TaskWithContactRow {
+  id: string;
+  contact_id: string;
+  title: string;
+  due_at: string | null;
+  done: boolean;
+  contacts: { name: string } | { name: string }[] | null;
+}
+
+// For the calendar's task-due-date display — every task with a due date,
+// across all contacts (fetchContactDetail's tasks are scoped to one contact).
+export async function fetchUpcomingTasks(supabase: TypedClient): Promise<CalendarTaskEntry[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("id, contact_id, title, due_at, done, contacts(name)")
+    .not("due_at", "is", null)
+    .order("due_at", { ascending: true })
+    .returns<TaskWithContactRow[]>();
+  if (error) throw error;
+
+  return (data ?? [])
+    .filter((row): row is TaskWithContactRow & { due_at: string } => row.due_at !== null)
+    .map((row) => {
+      const contact = Array.isArray(row.contacts) ? row.contacts[0] : row.contacts;
+      return {
+        id: row.id,
+        contact_id: row.contact_id,
+        contact_name: contact?.name ?? "—",
+        title: row.title,
+        due_at: row.due_at,
+        done: row.done,
+      };
+    });
 }
 
 export async function addNote(supabase: TypedClient, contactId: string, content: string) {

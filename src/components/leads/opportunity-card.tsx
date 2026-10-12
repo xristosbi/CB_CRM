@@ -1,7 +1,7 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import { MoreVertical, Pencil, Phone, StickyNote, Trash2 } from "lucide-react";
+import { CalendarClock, MoreVertical, Pencil, Phone, StickyNote, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatAthensDateLong, formatAthensTime } from "@/lib/calendar-tz";
 import { cn } from "@/lib/utils";
 import type { OpportunityCard as OpportunityCardData } from "@/lib/types";
 
@@ -23,12 +24,14 @@ const currency = new Intl.NumberFormat("el-GR", {
 
 export function OpportunityCard({
   opportunity,
+  nextAppointmentAt,
   onQuickCall,
   onQuickNote,
   onEdit,
   onDelete,
 }: {
   opportunity: OpportunityCardData;
+  nextAppointmentAt?: string | null;
   onQuickCall: (opportunity: OpportunityCardData) => void;
   onQuickNote: (opportunity: OpportunityCardData) => void;
   onEdit: (opportunity: OpportunityCardData) => void;
@@ -137,6 +140,19 @@ export function OpportunityCard({
           </Button>
         </div>
       </div>
+
+      {nextAppointmentAt && (
+        <div
+          className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground"
+          title={`Επόμενο ραντεβού: ${formatAthensDateLong(new Date(nextAppointmentAt))} ${formatAthensTime(new Date(nextAppointmentAt))}`}
+        >
+          <CalendarClock className="size-3 shrink-0" />
+          <span className="truncate">
+            {formatAthensDateLong(new Date(nextAppointmentAt))} ·{" "}
+            {formatAthensTime(new Date(nextAppointmentAt))}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

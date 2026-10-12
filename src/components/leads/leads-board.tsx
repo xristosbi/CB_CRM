@@ -101,6 +101,10 @@ export function LeadsBoard(props: {
   initialCampaigns: Campaign[];
   initialOpportunities: OpportunityCard[];
   usingMockData: boolean;
+  // contact_id -> next upcoming appointment's starts_at (ISO), for the
+  // kanban card's 📅 badge. A plain object (not a Map) since this crosses
+  // the server/client component boundary as a prop.
+  initialNextAppointmentByContact?: Record<string, string>;
   // Set by /campaigns/[id]: locks the board to a single pipeline+campaign
   // (no pipeline tabs, no campaign switcher — that page's own header covers
   // name/pipeline/stats, and "Άνοιγμα στο Leads" is the explicit escape
@@ -122,6 +126,7 @@ function LeadsBoardInner({
   initialStages,
   initialCampaigns,
   initialOpportunities,
+  initialNextAppointmentByContact,
   usingMockData,
   lockedCampaignId,
 }: {
@@ -129,6 +134,7 @@ function LeadsBoardInner({
   initialStages: Stage[];
   initialCampaigns: Campaign[];
   initialOpportunities: OpportunityCard[];
+  initialNextAppointmentByContact?: Record<string, string>;
   usingMockData: boolean;
   lockedCampaignId?: string;
 }) {
@@ -290,6 +296,11 @@ function LeadsBoardInner({
     }
     return map;
   }, [opportunities]);
+
+  const nextAppointmentByContact = useMemo(
+    () => new Map(Object.entries(initialNextAppointmentByContact ?? {})),
+    [initialNextAppointmentByContact]
+  );
 
   const opportunitiesByStage = useMemo(() => {
     const dateRange = dateFilterOpen
@@ -922,6 +933,7 @@ function LeadsBoardInner({
                   stage={stage}
                   opportunities={opportunitiesByStage.get(stage.id) ?? []}
                   activeDragType={activeDragType}
+                  nextAppointmentByContact={nextAppointmentByContact}
                   onQuickCall={(o) => {
                     setQuickTarget(o);
                     setQuickType("call");

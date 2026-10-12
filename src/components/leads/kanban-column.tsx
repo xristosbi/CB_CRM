@@ -28,6 +28,7 @@ export function KanbanColumn({
   stage,
   opportunities,
   activeDragType,
+  nextAppointmentByContact,
   onQuickCall,
   onQuickNote,
   onEditOpportunity,
@@ -38,6 +39,7 @@ export function KanbanColumn({
   stage: Stage;
   opportunities: OpportunityCardData[];
   activeDragType: "card" | "column" | null;
+  nextAppointmentByContact?: Map<string, string>;
   onQuickCall: (opportunity: OpportunityCardData) => void;
   onQuickNote: (opportunity: OpportunityCardData) => void;
   onEditOpportunity: (opportunity: OpportunityCardData) => void;
@@ -197,6 +199,7 @@ export function KanbanColumn({
           <OpportunityCard
             key={opportunity.id}
             opportunity={opportunity}
+            nextAppointmentAt={nextAppointmentByContact?.get(opportunity.contact_id) ?? null}
             onQuickCall={onQuickCall}
             onQuickNote={onQuickNote}
             onEdit={onEditOpportunity}

@@ -21,6 +21,7 @@ import { createClient } from "@/lib/supabase/client";
 import { toHref } from "@/lib/utils";
 import type {
   ActivityEntry,
+  CalendarEvent,
   Contact,
   ContactOpportunity,
   FollowUpTask,
@@ -28,6 +29,7 @@ import type {
 } from "@/lib/types";
 import { AddTaskDialog } from "./add-task-dialog";
 import { ActivityFeed } from "./activity-feed";
+import { AppointmentsSection } from "./appointments-section";
 import { ContactDialog, type ContactFormValues } from "./contact-dialog";
 import { ContactPaymentsSection } from "./contact-payments-section";
 import { DeleteContactDialog } from "./delete-contact-dialog";
@@ -52,6 +54,7 @@ export function ContactDetailView({
   initialActivity,
   initialTasks,
   initialPayments,
+  initialAppointments,
   usingMockData,
 }: {
   contact: Contact;
@@ -59,6 +62,7 @@ export function ContactDetailView({
   initialActivity: ActivityEntry[];
   initialTasks: FollowUpTask[];
   initialPayments: Payment[];
+  initialAppointments: CalendarEvent[];
   usingMockData: boolean;
 }) {
   const router = useRouter();
@@ -163,6 +167,10 @@ export function ContactDetailView({
       setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, done: previous } : t)));
       toast.error("Η ενημέρωση απέτυχε.");
     }
+  }
+
+  function handleAppointmentActivityLogged(entry: ActivityEntry) {
+    setActivity((prev) => [entry, ...prev]);
   }
 
   async function handleEditActivityEntry(id: string, content: string) {
@@ -310,6 +318,14 @@ export function ContactDetailView({
               <TasksPanel tasks={tasks} onToggle={handleToggleTask} />
             </div>
           </section>
+
+          <AppointmentsSection
+            contact={contact}
+            opportunities={initialOpportunities}
+            initialEvents={initialAppointments}
+            usingMockData={usingMockData}
+            onActivityLogged={handleAppointmentActivityLogged}
+          />
 
           <section>
             <h2 className="text-sm font-semibold text-muted-foreground">Activity</h2>

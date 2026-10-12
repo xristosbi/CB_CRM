@@ -1,6 +1,7 @@
 import type {
   ActivityEntry,
   Campaign,
+  CalendarEvent,
   Contact,
   Expense,
   FollowUpTask,
@@ -265,6 +266,100 @@ export const MOCK_PAYMENTS: Payment[] = [
     invoice_ref: null,
     notes: "Ο πελάτης ακύρωσε το πακέτο.",
     created_at: "2026-07-28T10:00:00.000Z",
+  },
+];
+
+// Relative-to-now offsets (not fixed dates like the rest of this file) so
+// the calendar's default "today/this week" view always has something to
+// show, whenever the demo happens to run.
+function hoursFromNow(hours: number): string {
+  return new Date(Date.now() + hours * 3600_000).toISOString();
+}
+
+export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
+  {
+    id: "cal-1",
+    title: "Κλήση πώλησης — chatbot",
+    starts_at: hoursFromNow(2),
+    ends_at: hoursFromNow(2.5),
+    type: "sales_call",
+    contact_id: "c-1",
+    contact_name: "Γιώργος Παπαδόπουλος",
+    contact_phone: "+30 690 000 0001",
+    contact_email: "giorgos@example.gr",
+    opportunity_id: "opp-1",
+    notes: "Παρουσίαση demo chatbot.",
+    google_event_id: null,
+  },
+  {
+    id: "cal-2",
+    title: "Ρύθμιση voice agent",
+    starts_at: hoursFromNow(2.25),
+    ends_at: hoursFromNow(2.75),
+    type: "setting_call",
+    contact_id: "c-3",
+    contact_name: "Νίκος Αντωνίου",
+    contact_phone: "+30 690 000 0003",
+    contact_email: "nikos@example.gr",
+    opportunity_id: "opp-3",
+    notes: null,
+    google_event_id: null,
+  },
+  {
+    id: "cal-3",
+    title: "Follow-up — πρόταση τιμής",
+    starts_at: hoursFromNow(26),
+    ends_at: hoursFromNow(26.5),
+    type: "follow_up",
+    contact_id: "c-4",
+    contact_name: "Ελένη Δημητρίου",
+    contact_phone: "+30 690 000 0004",
+    contact_email: "eleni@example.gr",
+    opportunity_id: "opp-4",
+    notes: null,
+    google_event_id: null,
+  },
+  {
+    id: "cal-4",
+    title: "Γενική ενημέρωση",
+    starts_at: hoursFromNow(72),
+    ends_at: hoursFromNow(72.5),
+    type: "other",
+    contact_id: "c-5",
+    contact_name: "Κώστας Βασιλείου",
+    contact_phone: "+30 690 000 0005",
+    contact_email: "kostas@example.gr",
+    opportunity_id: null,
+    notes: "Check-in χωρίς συγκεκριμένο θέμα.",
+    google_event_id: null,
+  },
+  {
+    id: "cal-5",
+    title: "Κλήση πώλησης — review domination",
+    starts_at: hoursFromNow(168),
+    ends_at: hoursFromNow(168.5),
+    type: "sales_call",
+    contact_id: "c-5",
+    contact_name: "Κώστας Βασιλείου",
+    contact_phone: "+30 690 000 0005",
+    contact_email: "kostas@example.gr",
+    opportunity_id: "opp-5",
+    notes: null,
+    google_event_id: null,
+  },
+  {
+    id: "cal-6",
+    title: "Παλιά κλήση ρύθμισης",
+    starts_at: hoursFromNow(-48),
+    ends_at: hoursFromNow(-47.5),
+    type: "setting_call",
+    contact_id: "c-1",
+    contact_name: "Γιώργος Παπαδόπουλος",
+    contact_phone: "+30 690 000 0001",
+    contact_email: "giorgos@example.gr",
+    opportunity_id: "opp-6",
+    notes: "Ολοκληρώθηκε επιτυχώς.",
+    google_event_id: null,
   },
 ];
 

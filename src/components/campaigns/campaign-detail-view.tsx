@@ -29,6 +29,7 @@ export function CampaignDetailView({
   initialStages,
   initialCampaigns,
   initialOpportunities,
+  initialNextAppointmentByContact,
   usingMockData,
 }: {
   campaign: Campaign;
@@ -37,6 +38,7 @@ export function CampaignDetailView({
   initialStages: Stage[];
   initialCampaigns: Campaign[];
   initialOpportunities: OpportunityCard[];
+  initialNextAppointmentByContact?: Record<string, string>;
   usingMockData: boolean;
 }) {
   const stats = useMemo(
@@ -102,6 +104,7 @@ export function CampaignDetailView({
           initialStages={initialStages}
           initialCampaigns={initialCampaigns}
           initialOpportunities={initialOpportunities}
+          initialNextAppointmentByContact={initialNextAppointmentByContact}
           usingMockData={usingMockData}
           lockedCampaignId={campaign.id}
         />

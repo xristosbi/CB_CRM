@@ -1,5 +1,6 @@
 export type ActivityType = "call" | "note" | "stage_change" | "fathom_summary" | "payment";
 export type PaymentStatus = "pending" | "paid" | "cancelled";
+export type CalendarEventType = "sales_call" | "setting_call" | "follow_up" | "other";
 
 export interface Database {
   public: {
@@ -292,6 +293,51 @@ export interface Database {
           },
         ];
       };
+      calendar_events: {
+        Row: {
+          id: string;
+          title: string;
+          starts_at: string;
+          ends_at: string;
+          type: CalendarEventType;
+          contact_id: string | null;
+          opportunity_id: string | null;
+          notes: string | null;
+          google_event_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          starts_at: string;
+          ends_at: string;
+          type?: CalendarEventType;
+          contact_id?: string | null;
+          opportunity_id?: string | null;
+          notes?: string | null;
+          google_event_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["calendar_events"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_contact_id_fkey";
+            columns: ["contact_id"];
+            isOneToOne: false;
+            referencedRelation: "contacts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "calendar_events_opportunity_id_fkey";
+            columns: ["opportunity_id"];
+            isOneToOne: false;
+            referencedRelation: "opportunities";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -307,6 +353,7 @@ export interface Database {
     Enums: {
       activity_type: ActivityType;
       payment_status: PaymentStatus;
+      calendar_event_type: CalendarEventType;
     };
     CompositeTypes: Record<string, never>;
   };

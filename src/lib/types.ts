@@ -1,4 +1,4 @@
-import type { ActivityType, PaymentStatus } from "@/lib/database.types";
+import type { ActivityType, CalendarEventType, PaymentStatus } from "@/lib/database.types";
 
 export interface Pipeline {
   id: string;
@@ -72,6 +72,15 @@ export interface FollowUpTask {
   created_at: string;
 }
 
+export interface CalendarTaskEntry {
+  id: string;
+  contact_id: string;
+  contact_name: string;
+  title: string;
+  due_at: string;
+  done: boolean;
+}
+
 export interface Payment {
   id: string;
   contact_id: string;
@@ -81,6 +90,21 @@ export interface Payment {
   invoice_ref: string | null;
   notes: string | null;
   created_at: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  type: CalendarEventType;
+  contact_id: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  opportunity_id: string | null;
+  notes: string | null;
+  google_event_id: string | null;
 }
 
 export interface Expense {
