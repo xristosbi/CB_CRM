@@ -1,5 +1,6 @@
 import { AnalyticsView } from "@/components/analytics/analytics-view";
 import {
+  MOCK_CAMPAIGNS,
   MOCK_EXPENSES,
   MOCK_OPPORTUNITIES,
   MOCK_PAYMENTS,
@@ -15,10 +16,11 @@ import { createClient } from "@/lib/supabase/server";
 export default async function AnalyticsPage() {
   const usingMockData = !hasSupabaseEnv();
 
-  const { pipelines, stages, opportunities, payments, expenses } = usingMockData
+  const { pipelines, stages, campaigns, opportunities, payments, expenses } = usingMockData
     ? {
         pipelines: MOCK_PIPELINES,
         stages: MOCK_STAGES,
+        campaigns: MOCK_CAMPAIGNS,
         opportunities: MOCK_OPPORTUNITIES,
         payments: MOCK_PAYMENTS,
         expenses: MOCK_EXPENSES,
@@ -40,6 +42,7 @@ export default async function AnalyticsPage() {
         <AnalyticsView
           pipelines={pipelines}
           stages={stages}
+          campaigns={campaigns}
           opportunities={opportunities}
           payments={payments}
           expenses={expenses}

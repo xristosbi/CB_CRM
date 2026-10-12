@@ -1,5 +1,6 @@
 import type {
   ActivityEntry,
+  Campaign,
   Contact,
   Expense,
   FollowUpTask,
@@ -14,6 +15,14 @@ export const MOCK_PIPELINES: Pipeline[] = [
   { id: "pl-voice", name: "Voice Agent" },
   { id: "pl-reviews", name: "Review Domination" },
 ];
+
+export const MOCK_CAMPAIGNS: Campaign[] = MOCK_PIPELINES.map((pipeline) => ({
+  id: `${pipeline.id}-campaign-1`,
+  pipeline_id: pipeline.id,
+  name: "Αρχικό",
+  is_active: true,
+  created_at: "2026-06-01T00:00:00.000Z",
+}));
 
 const DEFAULT_STAGE_NAMES: Array<{ name: string; is_won: boolean }> = [
   { name: "Νέο Lead", is_won: false },
@@ -42,6 +51,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     source: "Facebook Ads",
     value: 900,
     campaign: "Q3 FB Leads",
+    campaign_id: "pl-chatbot-campaign-1",
     pipeline_id: "pl-chatbot",
     stage_id: "pl-chatbot-stage-1",
     created_at: "2026-08-06T09:00:00.000Z",
@@ -53,6 +63,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     source: "Referral",
     value: 600,
     campaign: "Referral Program",
+    campaign_id: "pl-chatbot-campaign-1",
     pipeline_id: "pl-chatbot",
     stage_id: "pl-chatbot-stage-0",
     created_at: "2026-08-10T10:00:00.000Z",
@@ -64,6 +75,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     source: "Google Ads",
     value: 1500,
     campaign: "Google Ads - Voice",
+    campaign_id: "pl-voice-campaign-1",
     pipeline_id: "pl-voice",
     stage_id: "pl-voice-stage-2",
     created_at: "2026-07-22T14:00:00.000Z",
@@ -75,6 +87,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     source: "Instagram",
     value: 450,
     campaign: null,
+    campaign_id: "pl-chatbot-campaign-1",
     pipeline_id: "pl-chatbot",
     stage_id: "pl-chatbot-stage-3",
     created_at: "2026-07-15T11:00:00.000Z",
@@ -86,6 +99,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     source: "Website",
     value: 2200,
     campaign: "SEO Organic",
+    campaign_id: "pl-reviews-campaign-1",
     pipeline_id: "pl-reviews",
     stage_id: "pl-reviews-stage-0",
     created_at: "2026-08-11T16:00:00.000Z",
@@ -97,6 +111,7 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     source: "Facebook Ads",
     value: 1200,
     campaign: "Cross-sell Voice",
+    campaign_id: "pl-voice-campaign-1",
     pipeline_id: "pl-voice",
     stage_id: "pl-voice-stage-0",
     created_at: "2026-06-25T08:30:00.000Z",

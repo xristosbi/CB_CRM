@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ContactDetailView } from "@/components/contacts/contact-detail-view";
 import {
   MOCK_ACTIVITY,
+  MOCK_CAMPAIGNS,
   MOCK_CONTACTS,
   MOCK_OPPORTUNITIES,
   MOCK_PAYMENTS,
@@ -29,6 +30,7 @@ export default async function ContactDetailPage({
     const opportunities = MOCK_OPPORTUNITIES.filter((o) => o.contact_id === id).map((o) => {
       const pipeline = MOCK_PIPELINES.find((p) => p.id === o.pipeline_id);
       const stage = MOCK_STAGES.find((s) => s.id === o.stage_id);
+      const campaignEntity = MOCK_CAMPAIGNS.find((c) => c.id === o.campaign_id);
       return {
         id: o.id,
         pipeline_id: o.pipeline_id,
@@ -37,6 +39,7 @@ export default async function ContactDetailPage({
         stage_name: stage?.name ?? "—",
         value: o.value,
         campaign: o.campaign,
+        campaign_entity_name: campaignEntity?.name ?? null,
       };
     });
     const activity = MOCK_ACTIVITY.filter((a) => a.contact_id === id);

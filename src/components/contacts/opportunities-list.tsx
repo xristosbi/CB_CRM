@@ -34,6 +34,11 @@ export function OpportunitiesList({
             <Badge variant="secondary">{opp.pipeline_name}</Badge>
             <span className="text-muted-foreground">→</span>
             <span className="font-medium">{opp.stage_name}</span>
+            {opp.campaign_entity_name && (
+              <Badge variant="outline" className="text-[11px]">
+                {opp.campaign_entity_name}
+              </Badge>
+            )}
             {opp.campaign && (
               <span className="text-xs text-muted-foreground">({opp.campaign})</span>
             )}

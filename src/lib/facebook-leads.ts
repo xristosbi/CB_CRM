@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ActivityType, Database } from "@/lib/database.types";
+import { ensureActiveCampaign } from "@/lib/queries/campaigns";
 
 type TypedClient = SupabaseClient<Database>;
 
@@ -329,6 +330,11 @@ export async function createOpportunityAndLog(
 ): Promise<{ opportunityId: string | null }> {
   let opportunityId: string | null = null;
   if (params.routing.pipelineId && params.routing.stage) {
+    // A pipeline should always have an active campaign to receive new
+    // leads, but self-heals (creates "Αρχικό") instead of ever failing the
+    // lead over a missing one.
+    const { id: campaignId } = await ensureActiveCampaign(supabase, params.routing.pipelineId);
+
     const { data: opp, error: oppError } = await supabase
       .from("opportunities")
       .insert({
@@ -336,6 +342,7 @@ export async function createOpportunityAndLog(
         pipeline_id: params.routing.pipelineId,
         stage_id: params.routing.stage.id,
         campaign: params.campaignLabel,
+        campaign_id: campaignId,
       })
       .select("id")
       .single();

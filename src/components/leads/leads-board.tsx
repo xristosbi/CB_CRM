@@ -11,15 +11,23 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-kit/sortable";
-import { X } from "lucide-react";
+import { CalendarRange, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContactDialog, type ContactFormValues, type OpportunitySelection } from "@/components/contacts/contact-dialog";
+import { DateRangeFilter } from "@/components/payments/date-range-filter";
 import { createLead } from "@/lib/queries/contacts";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import {
+  activateCampaign,
+  createCampaignAndActivate,
+  deleteCampaignIfEmpty,
+  ensureActiveCampaign,
+  renameCampaign,
+} from "@/lib/queries/campaigns";
 import {
   addStage,
   createPipelineWithStages,
@@ -32,48 +40,74 @@ import {
   updateOpportunity,
   updateOpportunityStage,
 } from "@/lib/queries/leads";
-import type { OpportunityCard, Pipeline, Stage } from "@/lib/types";
+import { computeDateRange, isWithinRange, type DateRangePreset } from "@/lib/date-range";
+import type { Campaign, OpportunityCard, Pipeline, Stage } from "@/lib/types";
 import type { ActivityType } from "@/lib/database.types";
 import { AddStageColumn } from "./add-stage-column";
+import { ALL_CAMPAIGNS_VALUE, CampaignDropdown } from "./campaign-dropdown";
 import { DeleteOpportunityDialog } from "./delete-opportunity-dialog";
 import { DeleteStageDialog } from "./delete-stage-dialog";
 import { EditOpportunityDialog } from "./edit-opportunity-dialog";
 import { KanbanColumn } from "./kanban-column";
+import { NewCampaignDialog } from "./new-campaign-dialog";
 import { NewPipelineDialog } from "./new-pipeline-dialog";
 import { QuickActivityDialog } from "./quick-activity-dialog";
 
 const PIPELINE_STORAGE_KEY = "crm:selected-pipeline";
+const CAMPAIGN_STORAGE_PREFIX = "crm:selected-campaign:";
+
+function campaignStorageKey(pipelineId: string) {
+  return `${CAMPAIGN_STORAGE_PREFIX}${pipelineId}`;
+}
 
 // Same useSyncExternalStore pattern as the theme toggle: reads localStorage
 // without a server/client hydration mismatch (getServerSnapshot returns ""
 // since there's no DOM on the server; getSnapshot reads the real value once
 // hydrated, and React reconciles the difference for us instead of us having
 // to setState from an effect).
-function subscribeToPipelineStorage(callback: () => void) {
+function subscribeToStorage(callback: () => void) {
   window.addEventListener("storage", callback);
   return () => window.removeEventListener("storage", callback);
 }
 
-function getStoredPipelineSnapshot(): string {
+function readStorageSafe(key: string): string {
   try {
-    return window.localStorage.getItem(PIPELINE_STORAGE_KEY) ?? "";
+    return window.localStorage.getItem(key) ?? "";
   } catch {
     return "";
   }
 }
 
-function getStoredPipelineServerSnapshot(): string {
-  return "";
+function writeStorageSafe(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Storage unavailable (private browsing, quota, etc.) — the URL params
+    // still cover back/forward, just skip the extra fallback.
+  }
+}
+
+function resolveCampaignForPipeline(
+  pipelineId: string,
+  campaignsList: Campaign[],
+  storedValue: string
+): string {
+  if (storedValue === ALL_CAMPAIGNS_VALUE) return ALL_CAMPAIGNS_VALUE;
+  if (storedValue && campaignsList.some((c) => c.id === storedValue && c.pipeline_id === pipelineId)) {
+    return storedValue;
+  }
+  return campaignsList.find((c) => c.pipeline_id === pipelineId && c.is_active)?.id ?? ALL_CAMPAIGNS_VALUE;
 }
 
 export function LeadsBoard(props: {
   initialPipelines: Pipeline[];
   initialStages: Stage[];
+  initialCampaigns: Campaign[];
   initialOpportunities: OpportunityCard[];
   usingMockData: boolean;
 }) {
-  // useSearchParams() (used below to persist the selected pipeline tab in
-  // the URL) requires a Suspense boundary, or Next can't statically
+  // useSearchParams() (used below to persist the selected pipeline/campaign
+  // in the URL) requires a Suspense boundary, or Next can't statically
   // prerender the page it's used on.
   return (
     <Suspense>
@@ -85,11 +119,13 @@ export function LeadsBoard(props: {
 function LeadsBoardInner({
   initialPipelines,
   initialStages,
+  initialCampaigns,
   initialOpportunities,
   usingMockData,
 }: {
   initialPipelines: Pipeline[];
   initialStages: Stage[];
+  initialCampaigns: Campaign[];
   initialOpportunities: OpportunityCard[];
   usingMockData: boolean;
 }) {
@@ -99,19 +135,20 @@ function LeadsBoardInner({
 
   const [pipelines, setPipelines] = useState(initialPipelines);
   const [stages, setStages] = useState(initialStages);
+  const [campaigns, setCampaigns] = useState(initialCampaigns);
   const [opportunities, setOpportunities] = useState(initialOpportunities);
 
   const storedPipelineId = useSyncExternalStore(
-    subscribeToPipelineStorage,
-    getStoredPipelineSnapshot,
-    getStoredPipelineServerSnapshot
+    subscribeToStorage,
+    () => readStorageSafe(PIPELINE_STORAGE_KEY),
+    () => ""
   );
 
-  // Selection lives in the URL (?pipeline=<id>) first, so it survives
-  // browser back/forward, and falls back to localStorage so it also
-  // survives arriving via a plain link (e.g. the sidebar "Leads" item)
-  // that carries no query param — only when neither is present does it
-  // fall back to the first pipeline, same as before.
+  // Selection lives in the URL (?pipeline=&campaign=) first, so it survives
+  // browser back/forward, and falls back to localStorage (per pipeline, for
+  // the campaign) so it also survives arriving via a plain link (e.g. the
+  // sidebar "Leads" item) that carries no query param — only when neither
+  // is present does it fall back to the first pipeline / active campaign.
   const [selectedPipelineId, setSelectedPipelineIdState] = useState(() => {
     const fromUrl = searchParams.get("pipeline");
     if (fromUrl && initialPipelines.some((p) => p.id === fromUrl)) return fromUrl;
@@ -121,37 +158,67 @@ function LeadsBoardInner({
     return initialPipelines[0]?.id ?? "";
   });
 
-  function setSelectedPipelineId(id: string) {
-    setSelectedPipelineIdState(id);
-    try {
-      window.localStorage.setItem(PIPELINE_STORAGE_KEY, id);
-    } catch {
-      // Storage unavailable (private browsing, quota, etc.) — the URL
-      // param still covers back/forward, just skip the extra fallback.
+  const storedCampaignId = useSyncExternalStore(
+    subscribeToStorage,
+    () => readStorageSafe(campaignStorageKey(selectedPipelineId)),
+    () => ""
+  );
+
+  const [selectedCampaignId, setSelectedCampaignIdState] = useState(() => {
+    const fromUrl = searchParams.get("campaign");
+    if (fromUrl === ALL_CAMPAIGNS_VALUE) return ALL_CAMPAIGNS_VALUE;
+    if (fromUrl && initialCampaigns.some((c) => c.id === fromUrl && c.pipeline_id === selectedPipelineId)) {
+      return fromUrl;
     }
+    return resolveCampaignForPipeline(selectedPipelineId, initialCampaigns, storedCampaignId);
+  });
+
+  // Single source of truth for navigating to a (pipeline, campaign) pair:
+  // updates both pieces of state, both localStorage keys, and the URL in
+  // one shot, so clicking a pipeline tab never leaves the campaign filter
+  // pointed at a campaign from a different pipeline.
+  function navigateTo(pipelineId: string, campaignId: string) {
+    setSelectedPipelineIdState(pipelineId);
+    setSelectedCampaignIdState(campaignId);
+    writeStorageSafe(PIPELINE_STORAGE_KEY, pipelineId);
+    writeStorageSafe(campaignStorageKey(pipelineId), campaignId);
     const params = new URLSearchParams(searchParams.toString());
-    params.set("pipeline", id);
+    params.set("pipeline", pipelineId);
+    params.set("campaign", campaignId);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
-  // If we resolved the initial selection from the URL, mirror it into
-  // localStorage too (a fresh arrival with ?pipeline= should still update
-  // the fallback for the *next* time there's no URL param to read).
+  function setSelectedPipelineId(id: string) {
+    const nextCampaignId = resolveCampaignForPipeline(id, campaigns, readStorageSafe(campaignStorageKey(id)));
+    navigateTo(id, nextCampaignId);
+  }
+
+  function setSelectedCampaignId(id: string) {
+    navigateTo(selectedPipelineId, id);
+  }
+
+  // Mirrors a URL-supplied pipeline/campaign into localStorage on mount, so
+  // a link that *does* carry the params still keeps the fallback current
+  // for the next visit that doesn't.
   useEffect(() => {
-    const fromUrl = searchParams.get("pipeline");
-    if (fromUrl && initialPipelines.some((p) => p.id === fromUrl)) {
-      try {
-        window.localStorage.setItem(PIPELINE_STORAGE_KEY, fromUrl);
-      } catch {
-        // Ignore — see setSelectedPipelineId above.
+    const fromUrlPipeline = searchParams.get("pipeline");
+    const fromUrlCampaign = searchParams.get("campaign");
+    if (fromUrlPipeline && initialPipelines.some((p) => p.id === fromUrlPipeline)) {
+      writeStorageSafe(PIPELINE_STORAGE_KEY, fromUrlPipeline);
+    }
+    if (fromUrlCampaign && fromUrlPipeline) {
+      const valid =
+        fromUrlCampaign === ALL_CAMPAIGNS_VALUE ||
+        initialCampaigns.some((c) => c.id === fromUrlCampaign && c.pipeline_id === fromUrlPipeline);
+      if (valid) {
+        writeStorageSafe(campaignStorageKey(fromUrlPipeline), fromUrlCampaign);
       }
     }
-    // Runs once per mount, deliberately: this only mirrors whatever the
-    // URL said *at load time* into storage, it's not meant to re-fire on
-    // every subsequent selectedPipelineId change (setSelectedPipelineId
-    // already writes storage directly for that).
+    // Runs once per mount, deliberately — see setSelectedPipelineId/
+    // setSelectedCampaignId above for the ongoing (post-mount) writes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
   const [quickTarget, setQuickTarget] = useState<OpportunityCard | null>(null);
   const [quickType, setQuickType] = useState<Extract<ActivityType, "call" | "note"> | null>(
     null
@@ -162,17 +229,21 @@ function LeadsBoardInner({
     null
   );
   const [newLeadOpen, setNewLeadOpen] = useState(false);
+  const [newCampaignOpen, setNewCampaignOpen] = useState(false);
   const [activeDragType, setActiveDragType] = useState<"card" | "column" | null>(null);
   const [dragBanner, setDragBanner] = useState<{ tone: "error" | "warning"; message: string } | null>(
     null
   );
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
-  // Drag failures need to stay visible until the user notices them, not
-  // vanish with a normal toast timeout — a reverted card is easy to miss
-  // otherwise. Shows both a non-expiring toast and a banner pinned above
-  // the board; only an explicit dismiss (or a later drag issue replacing
-  // it) clears the banner.
-  function reportDragIssue(message: string, tone: "error" | "warning" = "error") {
+  // Errors need to stay visible until the user notices them, not vanish
+  // with a normal toast timeout. Shows both a non-expiring toast and a
+  // banner pinned above the board; only an explicit dismiss (or a later
+  // issue replacing it) clears the banner.
+  function reportIssue(message: string, tone: "error" | "warning" = "error") {
     setDragBanner({ tone, message });
     if (tone === "error") {
       toast.error(message, { duration: Infinity });
@@ -200,16 +271,46 @@ function LeadsBoardInner({
     [stages, selectedPipelineId]
   );
 
+  const campaignsForPipeline = useMemo(
+    () => campaigns.filter((c) => c.pipeline_id === selectedPipelineId),
+    [campaigns, selectedPipelineId]
+  );
+
+  const selectedCampaign = campaigns.find((c) => c.id === selectedCampaignId) ?? null;
+
+  const campaignOpportunityCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const o of opportunities) {
+      if (!o.campaign_id) continue;
+      map.set(o.campaign_id, (map.get(o.campaign_id) ?? 0) + 1);
+    }
+    return map;
+  }, [opportunities]);
+
   const opportunitiesByStage = useMemo(() => {
+    const dateRange = dateFilterOpen
+      ? computeDateRange(dateRangePreset, { from: customFrom, to: customTo })
+      : null;
+
     const map = new Map<string, OpportunityCard[]>();
     for (const opp of opportunities) {
       if (opp.pipeline_id !== selectedPipelineId) continue;
+      if (selectedCampaignId !== ALL_CAMPAIGNS_VALUE && opp.campaign_id !== selectedCampaignId) continue;
+      if (dateRange && !isWithinRange(opp.created_at, dateRange)) continue;
       const list = map.get(opp.stage_id) ?? [];
       list.push(opp);
       map.set(opp.stage_id, list);
     }
     return map;
-  }, [opportunities, selectedPipelineId]);
+  }, [
+    opportunities,
+    selectedPipelineId,
+    selectedCampaignId,
+    dateFilterOpen,
+    dateRangePreset,
+    customFrom,
+    customTo,
+  ]);
 
   // Realtime: reflect leads created/moved elsewhere (e.g. via webhook) instantly.
   useEffect(() => {
@@ -235,6 +336,7 @@ function LeadsBoardInner({
             stage_id: string;
             value: number | null;
             campaign: string | null;
+            campaign_id: string | null;
             created_at: string;
           };
 
@@ -249,6 +351,7 @@ function LeadsBoardInner({
                       stage_id: row.stage_id,
                       value: row.value,
                       campaign: row.campaign,
+                      campaign_id: row.campaign_id,
                     }
                   : o
               );
@@ -270,6 +373,7 @@ function LeadsBoardInner({
                   source: contact?.source ?? null,
                   value: row.value,
                   campaign: row.campaign,
+                  campaign_id: row.campaign_id,
                   pipeline_id: row.pipeline_id,
                   stage_id: row.stage_id,
                   created_at: row.created_at,
@@ -334,7 +438,7 @@ function LeadsBoardInner({
       setOpportunities((prev) =>
         prev.map((o) => (o.id === opportunityId ? { ...o, stage_id: previousStageId } : o))
       );
-      reportDragIssue(
+      reportIssue(
         `Η μετακίνηση του "${current.contact_name}" από "${fromName}" σε "${toName}" απέτυχε — παρέμεινε στο "${fromName}". ${describeError(err)}`
       );
       return;
@@ -349,7 +453,7 @@ function LeadsBoardInner({
         content: `[${pipelineName}] Μετακινήθηκε από "${fromName}" σε "${toName}"`,
       });
     } catch (err) {
-      reportDragIssue(
+      reportIssue(
         `Το "${current.contact_name}" μετακινήθηκε κανονικά σε "${toName}", αλλά δεν καταγράφηκε στο ιστορικό δραστηριότητας. ${describeError(err)}`,
         "warning"
       );
@@ -381,7 +485,7 @@ function LeadsBoardInner({
       await reorderStages(supabase, updates);
     } catch (err) {
       setStages(previousStages);
-      reportDragIssue(`Η αλλαγή σειράς στηλών απέτυχε, δοκίμασε ξανά. ${describeError(err)}`);
+      reportIssue(`Η αλλαγή σειράς στηλών απέτυχε, δοκίμασε ξανά. ${describeError(err)}`);
     }
   }
 
@@ -396,9 +500,17 @@ function LeadsBoardInner({
         position: index,
         is_won: false,
       }));
+      const newCampaign: Campaign = {
+        id: `mock-campaign-${crypto.randomUUID()}`,
+        pipeline_id: pipelineId,
+        name: "Αρχικό",
+        is_active: true,
+        created_at: new Date().toISOString(),
+      };
       setPipelines((prev) => [...prev, newPipeline]);
       setStages((prev) => [...prev, ...newStages]);
-      setSelectedPipelineId(pipelineId);
+      setCampaigns((prev) => [...prev, newCampaign]);
+      navigateTo(pipelineId, newCampaign.id);
       return;
     }
 
@@ -409,9 +521,14 @@ function LeadsBoardInner({
         name,
         stageNames
       );
+      const campaign = await ensureActiveCampaign(supabase, pipeline.id);
       setPipelines((prev) => [...prev, pipeline]);
       setStages((prev) => [...prev, ...createdStages]);
-      setSelectedPipelineId(pipeline.id);
+      setCampaigns((prev) => [
+        ...prev,
+        { id: campaign.id, pipeline_id: pipeline.id, name: "Αρχικό", is_active: true, created_at: new Date().toISOString() },
+      ]);
+      navigateTo(pipeline.id, campaign.id);
       toast.success("Το pipeline δημιουργήθηκε.");
     } catch {
       toast.error("Δεν ήταν δυνατή η δημιουργία του pipeline.");
@@ -424,6 +541,8 @@ function LeadsBoardInner({
   ) {
     if (usingMockData) {
       if (opportunity) {
+        const activeCampaignId =
+          campaigns.find((c) => c.pipeline_id === opportunity.pipeline_id && c.is_active)?.id ?? null;
         setOpportunities((prev) => [
           {
             id: `mock-${crypto.randomUUID()}`,
@@ -432,6 +551,7 @@ function LeadsBoardInner({
             source: values.source,
             value: null,
             campaign: null,
+            campaign_id: activeCampaignId,
             pipeline_id: opportunity.pipeline_id,
             stage_id: opportunity.stage_id,
             created_at: new Date().toISOString(),
@@ -445,7 +565,28 @@ function LeadsBoardInner({
 
     try {
       const supabase = createClient();
-      const { contact, opportunityId } = await createLead(supabase, values, opportunity);
+      let campaignId: string | null = null;
+      if (opportunity) {
+        const active = await ensureActiveCampaign(supabase, opportunity.pipeline_id);
+        campaignId = active.id;
+        if (!campaigns.some((c) => c.id === campaignId)) {
+          setCampaigns((prev) => [
+            ...prev,
+            {
+              id: active.id,
+              pipeline_id: opportunity.pipeline_id,
+              name: "Αρχικό",
+              is_active: true,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+        }
+      }
+      const { contact, opportunityId } = await createLead(
+        supabase,
+        values,
+        opportunity ? { ...opportunity, campaign_id: campaignId } : null
+      );
       if (opportunity && opportunityId) {
         setOpportunities((prev) => [
           {
@@ -455,6 +596,7 @@ function LeadsBoardInner({
             source: contact.source,
             value: null,
             campaign: null,
+            campaign_id: campaignId,
             pipeline_id: opportunity.pipeline_id,
             stage_id: opportunity.stage_id,
             created_at: new Date().toISOString(),
@@ -511,6 +653,117 @@ function LeadsBoardInner({
       setStages((prev) => [...prev, created]);
     } catch {
       toast.error("Δεν ήταν δυνατή η προσθήκη σταδίου.");
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Campaigns
+  // ---------------------------------------------------------------------
+
+  async function handleCreateCampaign(name: string) {
+    if (usingMockData) {
+      const newCampaign: Campaign = {
+        id: `mock-campaign-${crypto.randomUUID()}`,
+        pipeline_id: selectedPipelineId,
+        name,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      };
+      setCampaigns((prev) =>
+        prev
+          .map((c) => (c.pipeline_id === selectedPipelineId ? { ...c, is_active: false } : c))
+          .concat(newCampaign)
+      );
+      navigateTo(selectedPipelineId, newCampaign.id);
+      toast.success("Το campaign δημιουργήθηκε (demo δεδομένα).");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const created = await createCampaignAndActivate(supabase, selectedPipelineId, name);
+      setCampaigns((prev) =>
+        prev.map((c) => (c.pipeline_id === selectedPipelineId ? { ...c, is_active: false } : c)).concat(created)
+      );
+      navigateTo(selectedPipelineId, created.id);
+      toast.success("Το campaign δημιουργήθηκε.");
+    } catch (err) {
+      reportIssue(`Η δημιουργία campaign απέτυχε, τίποτα δεν άλλαξε. ${describeError(err)}`);
+    }
+  }
+
+  async function handleActivateCampaign(campaignId: string) {
+    if (usingMockData) {
+      setCampaigns((prev) =>
+        prev.map((c) => {
+          if (c.id === campaignId) return { ...c, is_active: true };
+          if (c.pipeline_id === selectedPipelineId) return { ...c, is_active: false };
+          return c;
+        })
+      );
+      toast.success("Το campaign ενεργοποιήθηκε (demo δεδομένα).");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const updated = await activateCampaign(supabase, campaignId);
+      setCampaigns((prev) =>
+        prev.map((c) => {
+          if (c.id === campaignId) return updated;
+          if (c.pipeline_id === updated.pipeline_id) return { ...c, is_active: false };
+          return c;
+        })
+      );
+      toast.success("Το campaign ενεργοποιήθηκε.");
+    } catch (err) {
+      reportIssue(`Η ενεργοποίηση campaign απέτυχε, τίποτα δεν άλλαξε. ${describeError(err)}`);
+    }
+  }
+
+  async function handleRenameCampaign(campaignId: string, name: string) {
+    const previous = campaigns.find((c) => c.id === campaignId)?.name;
+    setCampaigns((prev) => prev.map((c) => (c.id === campaignId ? { ...c, name } : c)));
+
+    if (usingMockData) return;
+
+    try {
+      const supabase = createClient();
+      await renameCampaign(supabase, campaignId, name);
+    } catch (err) {
+      if (previous !== undefined) {
+        setCampaigns((prev) => prev.map((c) => (c.id === campaignId ? { ...c, name: previous } : c)));
+      }
+      reportIssue(`Η μετονομασία campaign απέτυχε. ${describeError(err)}`);
+    }
+  }
+
+  async function handleDeleteCampaign(campaignId: string) {
+    const count = campaignOpportunityCounts.get(campaignId) ?? 0;
+    if (count > 0) {
+      toast.error("Το campaign δεν είναι άδειο — δεν μπορεί να διαγραφεί.");
+      return;
+    }
+
+    if (usingMockData) {
+      setCampaigns((prev) => prev.filter((c) => c.id !== campaignId));
+      if (selectedCampaignId === campaignId) {
+        setSelectedCampaignId(ALL_CAMPAIGNS_VALUE);
+      }
+      toast.success("Το campaign διαγράφηκε (demo δεδομένα).");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      await deleteCampaignIfEmpty(supabase, campaignId);
+      setCampaigns((prev) => prev.filter((c) => c.id !== campaignId));
+      if (selectedCampaignId === campaignId) {
+        setSelectedCampaignId(ALL_CAMPAIGNS_VALUE);
+      }
+      toast.success("Το campaign διαγράφηκε.");
+    } catch (err) {
+      reportIssue(`Η διαγραφή campaign απέτυχε. ${describeError(err)}`);
     }
   }
 
@@ -642,21 +895,62 @@ function LeadsBoardInner({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
-        <Tabs value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
-          <TabsList>
-            {pipelines.map((pipeline) => (
-              <TabsTrigger key={pipeline.id} value={pipeline.id}>
-                {pipeline.name}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        <div className="flex items-center gap-2">
-          <Button size="sm" onClick={() => setNewLeadOpen(true)}>
-            Νέο lead
+      <div className="flex flex-col gap-3 border-b p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Tabs value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
+            <TabsList>
+              {pipelines.map((pipeline) => (
+                <TabsTrigger key={pipeline.id} value={pipeline.id}>
+                  {pipeline.name}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => setNewLeadOpen(true)}>
+              Νέο lead
+            </Button>
+            <NewPipelineDialog onCreate={handleCreatePipeline} />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <CampaignDropdown
+            campaigns={campaignsForPipeline}
+            selectedCampaignId={selectedCampaignId}
+            campaignOpportunityCounts={campaignOpportunityCounts}
+            onSelect={setSelectedCampaignId}
+            onRename={handleRenameCampaign}
+            onActivate={handleActivateCampaign}
+            onDelete={handleDeleteCampaign}
+            onNewCampaign={() => setNewCampaignOpen(true)}
+          />
+          {selectedCampaign && !selectedCampaign.is_active && (
+            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning-foreground">
+              Παλιό campaign
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDateFilterOpen((prev) => !prev)}
+            className={cn(dateFilterOpen && "bg-accent")}
+          >
+            <CalendarRange className="size-4" />
+            Ημερομηνία
           </Button>
-          <NewPipelineDialog onCreate={handleCreatePipeline} />
+          {dateFilterOpen && (
+            <DateRangeFilter
+              preset={dateRangePreset}
+              customFrom={customFrom}
+              customTo={customTo}
+              onPresetChange={setDateRangePreset}
+              onCustomChange={(from, to) => {
+                setCustomFrom(from);
+                setCustomTo(to);
+              }}
+            />
+          )}
         </div>
       </div>
 
@@ -758,6 +1052,13 @@ function LeadsBoardInner({
         stages={stages}
         defaultPipelineId={selectedPipelineId}
         onSubmit={handleCreateLead}
+      />
+
+      <NewCampaignDialog
+        open={newCampaignOpen}
+        pipelineName={pipelines.find((p) => p.id === selectedPipelineId)?.name ?? ""}
+        onOpenChange={setNewCampaignOpen}
+        onCreate={handleCreateCampaign}
       />
 
       <EditOpportunityDialog

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ActivityType, Database } from "@/lib/database.types";
-import type { OpportunityCard, Pipeline, Stage } from "@/lib/types";
+import type { Campaign, OpportunityCard, Pipeline, Stage } from "@/lib/types";
 
 type TypedClient = SupabaseClient<Database>;
 
@@ -12,6 +12,7 @@ interface OpportunityRow {
   stage_id: string;
   value: number | null;
   campaign: string | null;
+  campaign_id: string | null;
   created_at: string;
   contacts: { name: string; source: string | null } | { name: string; source: string | null }[] | null;
 }
@@ -19,29 +20,40 @@ interface OpportunityRow {
 export async function fetchLeadsData(supabase: TypedClient): Promise<{
   pipelines: Pipeline[];
   stages: Stage[];
+  campaigns: Campaign[];
   opportunities: OpportunityCard[];
 }> {
-  const [{ data: pipelines, error: pipelinesError }, { data: stages, error: stagesError }, { data: opportunities, error: opportunitiesError }] =
-    await Promise.all([
-      supabase.from("pipelines").select("id, name").order("created_at", { ascending: true }),
-      supabase
-        .from("pipeline_stages")
-        .select("id, pipeline_id, name, position, is_won")
-        .order("position", { ascending: true }),
-      supabase
-        .from("opportunities")
-        .select("id, contact_id, pipeline_id, stage_id, value, campaign, created_at, contacts(name, source)")
-        .order("created_at", { ascending: false })
-        .returns<OpportunityRow[]>(),
-    ]);
+  const [
+    { data: pipelines, error: pipelinesError },
+    { data: stages, error: stagesError },
+    { data: campaigns, error: campaignsError },
+    { data: opportunities, error: opportunitiesError },
+  ] = await Promise.all([
+    supabase.from("pipelines").select("id, name").order("created_at", { ascending: true }),
+    supabase
+      .from("pipeline_stages")
+      .select("id, pipeline_id, name, position, is_won")
+      .order("position", { ascending: true }),
+    supabase
+      .from("campaigns")
+      .select("id, pipeline_id, name, is_active, created_at")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("opportunities")
+      .select("id, contact_id, pipeline_id, stage_id, value, campaign, campaign_id, created_at, contacts(name, source)")
+      .order("created_at", { ascending: false })
+      .returns<OpportunityRow[]>(),
+  ]);
 
   if (pipelinesError) throw pipelinesError;
   if (stagesError) throw stagesError;
+  if (campaignsError) throw campaignsError;
   if (opportunitiesError) throw opportunitiesError;
 
   return {
     pipelines: pipelines ?? [],
     stages: stages ?? [],
+    campaigns: campaigns ?? [],
     opportunities: (opportunities ?? []).map((row) => {
       const contact = Array.isArray(row.contacts) ? row.contacts[0] : row.contacts;
       return {
@@ -51,6 +63,7 @@ export async function fetchLeadsData(supabase: TypedClient): Promise<{
         source: contact?.source ?? null,
         value: row.value,
         campaign: row.campaign,
+        campaign_id: row.campaign_id,
         pipeline_id: row.pipeline_id,
         stage_id: row.stage_id,
         created_at: row.created_at,

@@ -5,6 +5,14 @@ export interface Pipeline {
   name: string;
 }
 
+export interface Campaign {
+  id: string;
+  pipeline_id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface Stage {
   id: string;
   pipeline_id: string;
@@ -20,6 +28,7 @@ export interface OpportunityCard {
   source: string | null;
   value: number | null;
   campaign: string | null;
+  campaign_id: string | null;
   pipeline_id: string;
   stage_id: string;
   created_at: string;
@@ -44,6 +53,7 @@ export interface ContactOpportunity {
   stage_name: string;
   value: number | null;
   campaign: string | null;
+  campaign_entity_name: string | null;
 }
 
 export interface ActivityEntry {

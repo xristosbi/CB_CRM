@@ -13,6 +13,7 @@ interface OpportunityWithRelationsRow {
   campaign: string | null;
   pipelines: { name: string } | { name: string }[] | null;
   pipeline_stages: { name: string } | { name: string }[] | null;
+  campaigns: { name: string } | { name: string }[] | null;
 }
 
 export async function fetchContacts(supabase: TypedClient): Promise<Contact[]> {
@@ -45,7 +46,9 @@ export async function fetchContactDetail(
     await Promise.all([
       supabase
         .from("opportunities")
-        .select("id, pipeline_id, stage_id, value, campaign, pipelines(name), pipeline_stages(name)")
+        .select(
+          "id, pipeline_id, stage_id, value, campaign, pipelines(name), pipeline_stages(name), campaigns(name)"
+        )
         .eq("contact_id", contactId)
         .order("created_at", { ascending: false })
         .returns<OpportunityWithRelationsRow[]>(),
@@ -70,6 +73,7 @@ export async function fetchContactDetail(
     opportunities: (opportunities ?? []).map((row) => {
       const pipeline = Array.isArray(row.pipelines) ? row.pipelines[0] : row.pipelines;
       const stage = Array.isArray(row.pipeline_stages) ? row.pipeline_stages[0] : row.pipeline_stages;
+      const campaignEntity = Array.isArray(row.campaigns) ? row.campaigns[0] : row.campaigns;
       return {
         id: row.id,
         pipeline_id: row.pipeline_id,
@@ -78,6 +82,7 @@ export async function fetchContactDetail(
         stage_name: stage?.name ?? "—",
         value: row.value,
         campaign: row.campaign,
+        campaign_entity_name: campaignEntity?.name ?? null,
       };
     }),
     activity: activity ?? [],
@@ -157,7 +162,7 @@ export async function updateContact(
 export async function createLead(
   supabase: TypedClient,
   contactInput: ContactInput,
-  opportunity: { pipeline_id: string; stage_id: string } | null
+  opportunity: { pipeline_id: string; stage_id: string; campaign_id?: string | null } | null
 ): Promise<{ contact: Contact; opportunityId: string | null }> {
   const contact = await createContact(supabase, contactInput);
 
@@ -169,6 +174,7 @@ export async function createLead(
         contact_id: contact.id,
         pipeline_id: opportunity.pipeline_id,
         stage_id: opportunity.stage_id,
+        campaign_id: opportunity.campaign_id ?? null,
       })
       .select("id")
       .single();

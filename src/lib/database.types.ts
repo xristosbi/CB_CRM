@@ -78,6 +78,7 @@ export interface Database {
           stage_id: string;
           value: number | null;
           campaign: string | null;
+          campaign_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -88,6 +89,7 @@ export interface Database {
           stage_id: string;
           value?: number | null;
           campaign?: string | null;
+          campaign_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -112,6 +114,13 @@ export interface Database {
             columns: ["stage_id"];
             isOneToOne: false;
             referencedRelation: "pipeline_stages";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "opportunities_campaign_id_fkey";
+            columns: ["campaign_id"];
+            isOneToOne: false;
+            referencedRelation: "campaigns";
             referencedColumns: ["id"];
           },
         ];
@@ -257,9 +266,44 @@ export interface Database {
           },
         ];
       };
+      campaigns: {
+        Row: {
+          id: string;
+          pipeline_id: string;
+          name: string;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          pipeline_id: string;
+          name: string;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["campaigns"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_pipeline_id_fkey";
+            columns: ["pipeline_id"];
+            isOneToOne: false;
+            referencedRelation: "pipelines";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      create_campaign_and_activate: {
+        Args: { p_pipeline_id: string; p_name: string };
+        Returns: Database["public"]["Tables"]["campaigns"]["Row"];
+      };
+      activate_campaign: {
+        Args: { p_campaign_id: string };
+        Returns: Database["public"]["Tables"]["campaigns"]["Row"];
+      };
+    };
     Enums: {
       activity_type: ActivityType;
       payment_status: PaymentStatus;
