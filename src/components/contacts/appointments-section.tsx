@@ -10,6 +10,7 @@ import { EventDialog, type OpportunityOption } from "@/components/calendar/event
 import { EventRow } from "@/components/calendar/event-pieces";
 import { buildAppointmentLogContent } from "@/lib/calendar-event-types";
 import { describeError } from "@/lib/errors";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import { notifyCalendarWebhook } from "@/lib/calendar-webhook-client";
 import {
   createCalendarEvent,
@@ -35,6 +36,7 @@ export function AppointmentsSection({
   usingMockData: boolean;
   onActivityLogged: (entry: ActivityEntry) => void;
 }) {
+  const { currentUser, profiles } = useCurrentUser();
   const [events, setEvents] = useState(initialEvents);
   const [dialogState, setDialogState] = useState<
     { mode: "create"; defaultStart: Date } | { mode: "edit"; event: CalendarEvent } | null
@@ -71,6 +73,10 @@ export function AppointmentsSection({
     const isEdit = dialogState?.mode === "edit";
     const editingId = isEdit ? dialogState.event.id : null;
 
+    const assigneeName = values.assigned_to
+      ? profiles.find((p) => p.id === values.assigned_to)?.display_name ?? null
+      : null;
+
     if (usingMockData) {
       if (editingId) {
         setEvents((prev) =>
@@ -82,6 +88,7 @@ export function AppointmentsSection({
                   contact_name: contact.name,
                   contact_phone: contact.phone,
                   contact_email: contact.email,
+                  assigned_to_name: assigneeName,
                 }
               : e
           )
@@ -95,6 +102,7 @@ export function AppointmentsSection({
             contact_name: contact.name,
             contact_phone: contact.phone,
             contact_email: contact.email,
+            assigned_to_name: assigneeName,
             google_event_id: null,
           },
         ]);
@@ -104,6 +112,8 @@ export function AppointmentsSection({
         opportunity_id: values.opportunity_id,
         type: "note",
         content: buildAppointmentLogContent(values.type, values.starts_at),
+        user_id: currentUser.id,
+        user_name: currentUser.display_name,
         created_at: new Date().toISOString(),
       });
       toast.success(
@@ -128,12 +138,15 @@ export function AppointmentsSection({
           opportunity_id: values.opportunity_id,
           type: "note",
           content: buildAppointmentLogContent(values.type, values.starts_at),
+          user_id: currentUser.id,
         });
         onActivityLogged({
           id: `local-${crypto.randomUUID()}`,
           opportunity_id: values.opportunity_id,
           type: "note",
           content: buildAppointmentLogContent(values.type, values.starts_at),
+          user_id: currentUser.id,
+          user_name: currentUser.display_name,
           created_at: new Date().toISOString(),
         });
       } catch (err) {

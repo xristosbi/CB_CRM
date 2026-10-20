@@ -5,8 +5,13 @@ import { Bot, Check, Pencil, Phone, StickyNote, ArrowRightLeft, Euro, Trash2, X 
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { UserAvatar } from "@/components/users/user-avatar";
+import { formatRelativeTime } from "@/lib/relative-time";
+import { cn } from "@/lib/utils";
 import type { ActivityEntry } from "@/lib/types";
 import type { ActivityType } from "@/lib/database.types";
+
+const CONTACT_TYPES: ActivityType[] = ["call", "note"];
 
 const ICONS: Record<ActivityType, typeof Phone> = {
   call: Phone,
@@ -26,13 +31,6 @@ const LABELS: Record<ActivityType, string> = {
 
 const EDITABLE_TYPES: ActivityType[] = ["note", "call"];
 
-const dateFormatter = new Intl.DateTimeFormat("el-GR", {
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
 export function ActivityFeed({
   activity,
   onEdit,
@@ -42,20 +40,44 @@ export function ActivityFeed({
   onEdit: (id: string, content: string) => Promise<void> | void;
   onDelete: (id: string) => Promise<void> | void;
 }) {
-  if (activity.length === 0) {
-    return (
-      <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-        Δεν υπάρχει ακόμα δραστηριότητα.
-      </p>
-    );
-  }
+  const [filter, setFilter] = useState<"all" | "contacts">("all");
+  const filtered = filter === "contacts" ? activity.filter((a) => CONTACT_TYPES.includes(a.type)) : activity;
 
   return (
-    <ol className="flex flex-col gap-4">
-      {activity.map((entry) => (
-        <ActivityFeedItem key={entry.id} entry={entry} onEdit={onEdit} onDelete={onDelete} />
-      ))}
-    </ol>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-1">
+        {(
+          [
+            ["all", "Όλα"],
+            ["contacts", "Μόνο επαφές"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setFilter(value)}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-xs font-medium",
+              filter === value ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          Δεν υπάρχει ακόμα δραστηριότητα.
+        </p>
+      ) : (
+        <ol className="flex flex-col gap-4">
+          {filtered.map((entry) => (
+            <ActivityFeedItem key={entry.id} entry={entry} onEdit={onEdit} onDelete={onDelete} />
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }
 
@@ -106,9 +128,6 @@ function ActivityFeedItem({
           <div className="flex shrink-0 items-center gap-1">
             {mode === "view" && (
               <>
-                <span className="text-xs text-muted-foreground">
-                  {dateFormatter.format(new Date(entry.created_at))}
-                </span>
                 {editable && (
                   <Button
                     type="button"
@@ -163,6 +182,16 @@ function ActivityFeedItem({
               </>
             )}
           </div>
+        </div>
+
+        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <UserAvatar
+            user={entry.user_id ? { id: entry.user_id, display_name: entry.user_name, color: null } : null}
+            size="sm"
+          />
+          <span>
+            {entry.user_name ?? "Σύστημα"} · {formatRelativeTime(entry.created_at)}
+          </span>
         </div>
 
         {mode === "editing" ? (

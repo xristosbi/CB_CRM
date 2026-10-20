@@ -42,6 +42,8 @@ export default async function ContactDetailPage({
         value: o.value,
         campaign: o.campaign,
         campaign_entity_name: campaignEntity?.name ?? null,
+        assigned_to: o.assigned_to,
+        assigned_to_name: o.assigned_to_name,
       };
     });
     const activity = MOCK_ACTIVITY.filter((a) => a.contact_id === id);

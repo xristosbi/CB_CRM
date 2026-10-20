@@ -15,11 +15,19 @@ import { CalendarRange, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContactDialog, type ContactFormValues, type OpportunitySelection } from "@/components/contacts/contact-dialog";
 import { DateRangeFilter } from "@/components/payments/date-range-filter";
 import { describeError } from "@/lib/errors";
 import { useCampaignActions } from "@/lib/hooks/use-campaign-actions";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import { createLead } from "@/lib/queries/contacts";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -34,7 +42,9 @@ import {
   renameStage,
   reorderStages,
   updateOpportunity,
+  updateOpportunityAssignment,
   updateOpportunityStage,
+  type LastContactInfo,
 } from "@/lib/queries/leads";
 import { computeDateRange, isWithinRange, type DateRangePreset } from "@/lib/date-range";
 import type { Campaign, OpportunityCard, Pipeline, Stage } from "@/lib/types";
@@ -48,6 +58,16 @@ import { KanbanColumn } from "./kanban-column";
 import { NewCampaignDialog } from "./new-campaign-dialog";
 import { NewPipelineDialog } from "./new-pipeline-dialog";
 import { QuickActivityDialog } from "./quick-activity-dialog";
+
+const ASSIGNEE_ALL = "all";
+const ASSIGNEE_ME = "me";
+const ASSIGNEE_UNASSIGNED = "unassigned";
+const ASSIGNEE_STORAGE_KEY = "crm:selected-assignee";
+
+const CONTACT_FILTER_ALL = "all";
+const CONTACT_FILTER_NONE = "none";
+const CONTACT_FILTER_HAS = "has";
+type ContactFilter = typeof CONTACT_FILTER_ALL | typeof CONTACT_FILTER_NONE | typeof CONTACT_FILTER_HAS;
 
 const PIPELINE_STORAGE_KEY = "crm:selected-pipeline";
 const CAMPAIGN_STORAGE_PREFIX = "crm:selected-campaign:";
@@ -105,6 +125,9 @@ export function LeadsBoard(props: {
   // kanban card's 📅 badge. A plain object (not a Map) since this crosses
   // the server/client component boundary as a prop.
   initialNextAppointmentByContact?: Record<string, string>;
+  // contact_id -> most recent call/note (who talked to them, and when), for
+  // the kanban card's "📞 name · time ago" indicator and the Επαφή filter.
+  initialLastContactByContact?: Record<string, LastContactInfo>;
   // Set by /campaigns/[id]: locks the board to a single pipeline+campaign
   // (no pipeline tabs, no campaign switcher — that page's own header covers
   // name/pipeline/stats, and "Άνοιγμα στο Leads" is the explicit escape
@@ -127,6 +150,7 @@ function LeadsBoardInner({
   initialCampaigns,
   initialOpportunities,
   initialNextAppointmentByContact,
+  initialLastContactByContact,
   usingMockData,
   lockedCampaignId,
 }: {
@@ -135,12 +159,14 @@ function LeadsBoardInner({
   initialCampaigns: Campaign[];
   initialOpportunities: OpportunityCard[];
   initialNextAppointmentByContact?: Record<string, string>;
+  initialLastContactByContact?: Record<string, LastContactInfo>;
   usingMockData: boolean;
   lockedCampaignId?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { currentUser, profiles } = useCurrentUser();
 
   const [pipelines, setPipelines] = useState(initialPipelines);
   const [stages, setStages] = useState(initialStages);
@@ -210,10 +236,42 @@ function LeadsBoardInner({
     navigateTo(selectedPipelineId, id);
   }
 
-  // Mirrors a URL-supplied pipeline/campaign into localStorage on mount, so
-  // a link that *does* carry the params still keeps the fallback current
-  // for the next visit that doesn't.
+  const storedAssigneeId = useSyncExternalStore(
+    subscribeToStorage,
+    () => readStorageSafe(ASSIGNEE_STORAGE_KEY),
+    () => ""
+  );
+
+  // Default follows role, but role itself is never shown — a setter starts
+  // on "Εγώ" (their own leads), an admin on "Όλοι".
+  const [selectedAssigneeId, setSelectedAssigneeIdState] = useState(() => {
+    const fromUrl = searchParams.get("assignee");
+    if (fromUrl) return fromUrl;
+    if (storedAssigneeId) return storedAssigneeId;
+    return currentUser.role === "admin" ? ASSIGNEE_ALL : ASSIGNEE_ME;
+  });
+
+  function setSelectedAssigneeId(id: string) {
+    setSelectedAssigneeIdState(id);
+    writeStorageSafe(ASSIGNEE_STORAGE_KEY, id);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("assignee", id);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  const [contactFilter, setContactFilter] = useState<ContactFilter>(CONTACT_FILTER_ALL);
+
+  const [lastContactByContact, setLastContactByContact] = useState<Map<string, LastContactInfo>>(
+    () => new Map(Object.entries(initialLastContactByContact ?? {}))
+  );
+
+  // Mirrors a URL-supplied pipeline/campaign/assignee into localStorage on
+  // mount, so a link that *does* carry the params still keeps the fallback
+  // current for the next visit that doesn't.
   useEffect(() => {
+    const fromUrlAssignee = searchParams.get("assignee");
+    if (fromUrlAssignee) writeStorageSafe(ASSIGNEE_STORAGE_KEY, fromUrlAssignee);
+
     if (lockedCampaignId) return;
     const fromUrlPipeline = searchParams.get("pipeline");
     const fromUrlCampaign = searchParams.get("campaign");
@@ -312,6 +370,19 @@ function LeadsBoardInner({
       if (opp.pipeline_id !== selectedPipelineId) continue;
       if (selectedCampaignId !== ALL_CAMPAIGNS_VALUE && opp.campaign_id !== selectedCampaignId) continue;
       if (dateRange && !isWithinRange(opp.created_at, dateRange)) continue;
+      if (selectedAssigneeId === ASSIGNEE_ME && opp.assigned_to !== currentUser.id) continue;
+      if (selectedAssigneeId === ASSIGNEE_UNASSIGNED && opp.assigned_to !== null) continue;
+      if (
+        selectedAssigneeId !== ASSIGNEE_ALL &&
+        selectedAssigneeId !== ASSIGNEE_ME &&
+        selectedAssigneeId !== ASSIGNEE_UNASSIGNED &&
+        opp.assigned_to !== selectedAssigneeId
+      ) {
+        continue;
+      }
+      const hasContact = lastContactByContact.has(opp.contact_id);
+      if (contactFilter === CONTACT_FILTER_NONE && hasContact) continue;
+      if (contactFilter === CONTACT_FILTER_HAS && !hasContact) continue;
       const list = map.get(opp.stage_id) ?? [];
       list.push(opp);
       map.set(opp.stage_id, list);
@@ -325,6 +396,10 @@ function LeadsBoardInner({
     dateRangePreset,
     customFrom,
     customTo,
+    selectedAssigneeId,
+    currentUser.id,
+    contactFilter,
+    lastContactByContact,
   ]);
 
   // Realtime: reflect leads created/moved elsewhere (e.g. via webhook) instantly.
@@ -352,8 +427,12 @@ function LeadsBoardInner({
             value: number | null;
             campaign: string | null;
             campaign_id: string | null;
+            assigned_to: string | null;
             created_at: string;
           };
+          const assigneeName = row.assigned_to
+            ? profiles.find((p) => p.id === row.assigned_to)?.display_name ?? null
+            : null;
 
           setOpportunities((prev) => {
             const exists = prev.find((o) => o.id === row.id);
@@ -367,6 +446,8 @@ function LeadsBoardInner({
                       value: row.value,
                       campaign: row.campaign,
                       campaign_id: row.campaign_id,
+                      assigned_to: row.assigned_to,
+                      assigned_to_name: assigneeName,
                     }
                   : o
               );
@@ -391,6 +472,8 @@ function LeadsBoardInner({
                   campaign_id: row.campaign_id,
                   pipeline_id: row.pipeline_id,
                   stage_id: row.stage_id,
+                  assigned_to: row.assigned_to,
+                  assigned_to_name: assigneeName,
                   created_at: row.created_at,
                 },
                 ...prev,
@@ -405,7 +488,7 @@ function LeadsBoardInner({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [usingMockData]);
+  }, [usingMockData, profiles]);
 
   function handleDragStart(event: DragStartEvent) {
     const type = event.active.data.current?.type;
@@ -466,6 +549,7 @@ function LeadsBoardInner({
         opportunity_id: opportunityId,
         type: "stage_change",
         content: `[${pipelineName}] Μετακινήθηκε από "${fromName}" σε "${toName}"`,
+        user_id: currentUser.id,
       });
     } catch (err) {
       reportIssue(
@@ -558,6 +642,9 @@ function LeadsBoardInner({
       if (opportunity) {
         const activeCampaignId =
           campaigns.find((c) => c.pipeline_id === opportunity.pipeline_id && c.is_active)?.id ?? null;
+        const assigneeName = opportunity.assigned_to
+          ? profiles.find((p) => p.id === opportunity.assigned_to)?.display_name ?? null
+          : null;
         setOpportunities((prev) => [
           {
             id: `mock-${crypto.randomUUID()}`,
@@ -569,6 +656,8 @@ function LeadsBoardInner({
             campaign_id: activeCampaignId,
             pipeline_id: opportunity.pipeline_id,
             stage_id: opportunity.stage_id,
+            assigned_to: opportunity.assigned_to,
+            assigned_to_name: assigneeName,
             created_at: new Date().toISOString(),
           },
           ...prev,
@@ -600,9 +689,13 @@ function LeadsBoardInner({
       const { contact, opportunityId } = await createLead(
         supabase,
         values,
-        opportunity ? { ...opportunity, campaign_id: campaignId } : null
+        opportunity ? { ...opportunity, campaign_id: campaignId } : null,
+        currentUser.id
       );
       if (opportunity && opportunityId) {
+        const assigneeName = opportunity.assigned_to
+          ? profiles.find((p) => p.id === opportunity.assigned_to)?.display_name ?? null
+          : null;
         setOpportunities((prev) => [
           {
             id: opportunityId,
@@ -614,6 +707,8 @@ function LeadsBoardInner({
             campaign_id: campaignId,
             pipeline_id: opportunity.pipeline_id,
             stage_id: opportunity.stage_id,
+            assigned_to: opportunity.assigned_to,
+            assigned_to_name: assigneeName,
             created_at: new Date().toISOString(),
           },
           ...prev,
@@ -768,6 +863,17 @@ function LeadsBoardInner({
         opportunity_id: quickTarget.id,
         type: quickType,
         content: content.trim(),
+        user_id: currentUser.id,
+      });
+      setLastContactByContact((prev) => {
+        const next = new Map(prev);
+        next.set(quickTarget.contact_id, {
+          type: quickType,
+          user_id: currentUser.id,
+          user_name: currentUser.display_name,
+          created_at: new Date().toISOString(),
+        });
+        return next;
       });
       toast.success("Καταχωρήθηκε.");
     } catch {
@@ -775,6 +881,63 @@ function LeadsBoardInner({
     } finally {
       setQuickTarget(null);
       setQuickType(null);
+    }
+  }
+
+  async function handleAssignOpportunity(opportunity: OpportunityCard, userId: string | null) {
+    const previousAssignedTo = opportunity.assigned_to;
+    const previousAssignedToName = opportunity.assigned_to_name;
+    const nextName = userId ? profiles.find((p) => p.id === userId)?.display_name ?? null : null;
+
+    setOpportunities((prev) =>
+      prev.map((o) =>
+        o.id === opportunity.id ? { ...o, assigned_to: userId, assigned_to_name: nextName } : o
+      )
+    );
+
+    if (usingMockData) {
+      toast.success(
+        userId ? "Η ανάθεση ενημερώθηκε (demo δεδομένα)." : "Η ανάθεση αφαιρέθηκε (demo δεδομένα)."
+      );
+      return;
+    }
+
+    const supabase = createClient();
+
+    // Same two-step convention as the drag-and-drop stage change: the
+    // assignment write must roll back the optimistic update on failure,
+    // but a failed activity-log write afterwards must not undo an
+    // assignment that already succeeded — warn only.
+    try {
+      await updateOpportunityAssignment(supabase, opportunity.id, userId);
+    } catch (err) {
+      setOpportunities((prev) =>
+        prev.map((o) =>
+          o.id === opportunity.id
+            ? { ...o, assigned_to: previousAssignedTo, assigned_to_name: previousAssignedToName }
+            : o
+        )
+      );
+      reportIssue(`Η ανάθεση απέτυχε, παρέμεινε όπως ήταν. ${describeError(err)}`);
+      return;
+    }
+
+    try {
+      const content = userId
+        ? `Ανατέθηκε σε ${nextName ?? "—"} από ${currentUser.display_name ?? "—"}`
+        : `Αφαιρέθηκε η ανάθεση από ${currentUser.display_name ?? "—"}`;
+      await insertActivity(supabase, {
+        contact_id: opportunity.contact_id,
+        opportunity_id: opportunity.id,
+        type: "note",
+        content,
+        user_id: currentUser.id,
+      });
+    } catch (err) {
+      reportIssue(
+        `Η ανάθεση ενημερώθηκε κανονικά, αλλά δεν καταγράφηκε στο ιστορικό δραστηριότητας. ${describeError(err)}`,
+        "warning"
+      );
     }
   }
 
@@ -812,7 +975,7 @@ function LeadsBoardInner({
       const supabase = createClient();
       const pipelineName = pipelines.find((p) => p.id === target.pipeline_id)?.name ?? "";
       const stageName = stages.find((s) => s.id === target.stage_id)?.name ?? "";
-      await deleteOpportunity(supabase, target, pipelineName, stageName);
+      await deleteOpportunity(supabase, target, pipelineName, stageName, currentUser.id);
       toast.success("Το lead διαγράφηκε.");
     } catch {
       setOpportunities((prev) => [target, ...prev]);
@@ -860,6 +1023,38 @@ function LeadsBoardInner({
                 Παλιό campaign
               </span>
             )}
+
+            <Select value={selectedAssigneeId} onValueChange={setSelectedAssigneeId}>
+              <SelectTrigger size="sm" className="w-auto gap-1.5">
+                <span className="text-muted-foreground">Υπεύθυνος:</span>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ASSIGNEE_ALL}>Όλοι</SelectItem>
+                <SelectItem value={ASSIGNEE_ME}>Εγώ</SelectItem>
+                {profiles
+                  .filter((p) => p.id !== currentUser.id)
+                  .map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.display_name ?? "—"}
+                    </SelectItem>
+                  ))}
+                <SelectItem value={ASSIGNEE_UNASSIGNED}>Μη ανατεθειμένα</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={contactFilter} onValueChange={(v) => setContactFilter(v as ContactFilter)}>
+              <SelectTrigger size="sm" className="w-auto gap-1.5">
+                <span className="text-muted-foreground">Επαφή:</span>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={CONTACT_FILTER_ALL}>Όλα</SelectItem>
+                <SelectItem value={CONTACT_FILTER_NONE}>Χωρίς επαφή</SelectItem>
+                <SelectItem value={CONTACT_FILTER_HAS}>Με επαφή</SelectItem>
+              </SelectContent>
+            </Select>
+
             <Button
               variant="ghost"
               size="sm"
@@ -934,6 +1129,8 @@ function LeadsBoardInner({
                   opportunities={opportunitiesByStage.get(stage.id) ?? []}
                   activeDragType={activeDragType}
                   nextAppointmentByContact={nextAppointmentByContact}
+                  lastContactByContact={lastContactByContact}
+                  profiles={profiles}
                   onQuickCall={(o) => {
                     setQuickTarget(o);
                     setQuickType("call");
@@ -944,6 +1141,7 @@ function LeadsBoardInner({
                   }}
                   onEditOpportunity={setEditOpportunityTarget}
                   onDeleteOpportunity={setDeleteOpportunityTarget}
+                  onAssignOpportunity={handleAssignOpportunity}
                   onRenameStage={handleRenameStage}
                   onDeleteStage={setDeleteTarget}
                 />
@@ -983,6 +1181,8 @@ function LeadsBoardInner({
         pipelines={pipelines}
         stages={stages}
         defaultPipelineId={selectedPipelineId}
+        profiles={profiles}
+        currentUserId={currentUser.id}
         onSubmit={handleCreateLead}
       />
 

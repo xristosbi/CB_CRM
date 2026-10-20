@@ -2,20 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { logout } from "@/app/login/actions";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import { NAV_ITEMS } from "./nav-items";
+import { UserMenu } from "./user-menu";
 
 export function SidebarNav({
-  email,
   onNavigate,
 }: {
-  email: string | null;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const { currentUser } = useCurrentUser();
+  const isAdmin = currentUser.role === "admin";
+  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <div className="flex h-full flex-col">
@@ -28,7 +29,7 @@ export function SidebarNav({
       </div>
 
       <nav className="flex-1 space-y-1 px-2">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
           return (
@@ -51,18 +52,7 @@ export function SidebarNav({
       </nav>
 
       <div className="border-t border-sidebar-border px-2 py-3">
-        {email && (
-          <p className="truncate px-3 pb-2 text-xs text-sidebar-foreground/60">{email}</p>
-        )}
-        <form action={logout}>
-          <button
-            type="submit"
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-brand-gold"
-          >
-            <LogOut className="size-4 shrink-0" />
-            Αποσύνδεση
-          </button>
-        </form>
+        <UserMenu onNavigate={onNavigate} />
       </div>
     </div>
   );

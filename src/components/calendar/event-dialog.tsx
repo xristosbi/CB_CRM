@@ -30,6 +30,7 @@ import {
   toDateInputValue,
   toTimeInputValue,
 } from "@/lib/calendar-tz";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import type { CalendarEventInput } from "@/lib/queries/calendar";
 import type { CalendarEvent, Contact } from "@/lib/types";
 import type { CalendarEventType } from "@/lib/database.types";
@@ -127,6 +128,8 @@ function EventForm({
     ? Math.max(5, Math.round((new Date(event.ends_at).getTime() - new Date(event.starts_at).getTime()) / 60000))
     : 30;
 
+  const { currentUser, profiles } = useCurrentUser();
+
   const [title, setTitle] = useState(event?.title ?? "");
   const [type, setType] = useState<CalendarEventType>(event?.type ?? "sales_call");
   const [dateStr, setDateStr] = useState(toDateInputValue(initialStart));
@@ -137,6 +140,9 @@ function EventForm({
   );
   const [opportunityId, setOpportunityId] = useState<string | null>(event?.opportunity_id ?? null);
   const [notes, setNotes] = useState(event?.notes ?? "");
+  const [assignedTo, setAssignedTo] = useState<string | null>(
+    mode === "edit" ? event?.assigned_to ?? null : currentUser.id
+  );
   const [submitting, setSubmitting] = useState(false);
 
   const lockedContactName = lockedContactId
@@ -178,6 +184,7 @@ function EventForm({
         contact_id: contactId,
         opportunity_id: opportunityId,
         notes: notes.trim() || null,
+        assigned_to: assignedTo,
       });
       onClose();
     } finally {
@@ -322,6 +329,26 @@ function EventForm({
             </Select>
           </div>
         )}
+
+        <div className="flex flex-col gap-1.5">
+          <Label>Υπεύθυνος</Label>
+          <Select
+            value={assignedTo ?? "unassigned"}
+            onValueChange={(v) => setAssignedTo(v === "unassigned" ? null : v)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unassigned">Μη ανατεθειμένο</SelectItem>
+              {profiles.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.display_name ?? "—"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="event-notes">Σημειώσεις</Label>

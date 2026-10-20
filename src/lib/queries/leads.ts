@@ -13,8 +13,10 @@ interface OpportunityRow {
   value: number | null;
   campaign: string | null;
   campaign_id: string | null;
+  assigned_to: string | null;
   created_at: string;
   contacts: { name: string; source: string | null } | { name: string; source: string | null }[] | null;
+  profiles: { display_name: string | null } | { display_name: string | null }[] | null;
 }
 
 export async function fetchLeadsData(supabase: TypedClient): Promise<{
@@ -40,7 +42,9 @@ export async function fetchLeadsData(supabase: TypedClient): Promise<{
       .order("created_at", { ascending: false }),
     supabase
       .from("opportunities")
-      .select("id, contact_id, pipeline_id, stage_id, value, campaign, campaign_id, created_at, contacts(name, source)")
+      .select(
+        "id, contact_id, pipeline_id, stage_id, value, campaign, campaign_id, assigned_to, created_at, contacts(name, source), profiles(display_name)"
+      )
       .order("created_at", { ascending: false })
       .returns<OpportunityRow[]>(),
   ]);
@@ -56,6 +60,7 @@ export async function fetchLeadsData(supabase: TypedClient): Promise<{
     campaigns: campaigns ?? [],
     opportunities: (opportunities ?? []).map((row) => {
       const contact = Array.isArray(row.contacts) ? row.contacts[0] : row.contacts;
+      const assignee = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
       return {
         id: row.id,
         contact_id: row.contact_id,
@@ -66,6 +71,8 @@ export async function fetchLeadsData(supabase: TypedClient): Promise<{
         campaign_id: row.campaign_id,
         pipeline_id: row.pipeline_id,
         stage_id: row.stage_id,
+        assigned_to: row.assigned_to,
+        assigned_to_name: assignee?.display_name ?? null,
         created_at: row.created_at,
       };
     }),
@@ -186,11 +193,44 @@ export async function updateOpportunity(
   if (error) throw error;
 }
 
+// .select().single() so an RLS-blocked 0-row update becomes a real thrown
+// error instead of a silent no-op, same convention as updateOpportunityStage.
+export async function updateOpportunityAssignment(
+  supabase: TypedClient,
+  opportunityId: string,
+  assignedTo: string | null
+) {
+  const { error } = await supabase
+    .from("opportunities")
+    .update({ assigned_to: assignedTo })
+    .eq("id", opportunityId)
+    .select("id")
+    .single();
+  if (error) throw error;
+}
+
+export async function bulkAssignOpportunities(
+  supabase: TypedClient,
+  opportunityIds: string[],
+  assignedTo: string | null
+) {
+  const { data, error } = await supabase
+    .from("opportunities")
+    .update({ assigned_to: assignedTo })
+    .in("id", opportunityIds)
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length !== opportunityIds.length) {
+    throw new Error("bulkAssignOpportunities: not all rows were updated (RLS?)");
+  }
+}
+
 export async function deleteOpportunity(
   supabase: TypedClient,
   opportunity: { id: string; contact_id: string; pipeline_id: string; stage_id: string },
   pipelineName: string,
-  stageName: string
+  stageName: string,
+  userId?: string | null
 ) {
   const { error } = await supabase.from("opportunities").delete().eq("id", opportunity.id);
   if (error) throw error;
@@ -199,8 +239,56 @@ export async function deleteOpportunity(
     contact_id: opportunity.contact_id,
     type: "note" as ActivityType,
     content: `Διαγράφηκε opportunity: ${pipelineName} / ${stageName}`,
+    user_id: userId ?? null,
   });
   if (activityError) throw activityError;
+}
+
+export interface LastContactInfo {
+  type: Extract<ActivityType, "call" | "note">;
+  user_id: string | null;
+  user_name: string | null;
+  created_at: string;
+}
+
+interface LastContactRow {
+  contact_id: string;
+  type: ActivityType;
+  user_id: string | null;
+  created_at: string;
+  profiles: { display_name: string | null } | { display_name: string | null }[] | null;
+}
+
+// One grouped query for every visible contact's most recent call/note,
+// instead of a per-card query — the newest row per contact_id wins since
+// results come back ordered newest-first.
+export async function fetchLastContactByContact(
+  supabase: TypedClient,
+  contactIds: string[]
+): Promise<Map<string, LastContactInfo>> {
+  const map = new Map<string, LastContactInfo>();
+  if (contactIds.length === 0) return map;
+
+  const { data, error } = await supabase
+    .from("activity_log")
+    .select("contact_id, type, user_id, created_at, profiles(display_name)")
+    .in("contact_id", contactIds)
+    .in("type", ["call", "note"])
+    .order("created_at", { ascending: false })
+    .returns<LastContactRow[]>();
+  if (error) throw error;
+
+  for (const row of data ?? []) {
+    if (map.has(row.contact_id)) continue;
+    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+    map.set(row.contact_id, {
+      type: row.type as "call" | "note",
+      user_id: row.user_id,
+      user_name: profile?.display_name ?? null,
+      created_at: row.created_at,
+    });
+  }
+  return map;
 }
 
 export async function insertActivity(
@@ -210,6 +298,7 @@ export async function insertActivity(
     opportunity_id?: string | null;
     type: ActivityType;
     content: string;
+    user_id?: string | null;
   }
 ) {
   const { error } = await supabase.from("activity_log").insert(params);

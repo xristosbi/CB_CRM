@@ -1,7 +1,7 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import { CalendarClock, MoreVertical, Pencil, Phone, StickyNote, Trash2 } from "lucide-react";
+import { CalendarClock, MoreVertical, Pencil, Phone, PhoneOff, StickyNote, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -10,11 +10,15 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { UserAvatar } from "@/components/users/user-avatar";
 import { formatAthensDateLong, formatAthensTime } from "@/lib/calendar-tz";
+import { formatRelativeTime } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
-import type { OpportunityCard as OpportunityCardData } from "@/lib/types";
+import type { LastContactInfo } from "@/lib/queries/leads";
+import type { OpportunityCard as OpportunityCardData, Profile } from "@/lib/types";
 
 const currency = new Intl.NumberFormat("el-GR", {
   style: "currency",
@@ -25,17 +29,23 @@ const currency = new Intl.NumberFormat("el-GR", {
 export function OpportunityCard({
   opportunity,
   nextAppointmentAt,
+  lastContact,
+  profiles,
   onQuickCall,
   onQuickNote,
   onEdit,
   onDelete,
+  onAssign,
 }: {
   opportunity: OpportunityCardData;
   nextAppointmentAt?: string | null;
+  lastContact?: LastContactInfo | null;
+  profiles: Profile[];
   onQuickCall: (opportunity: OpportunityCardData) => void;
   onQuickNote: (opportunity: OpportunityCardData) => void;
   onEdit: (opportunity: OpportunityCardData) => void;
   onDelete: (opportunity: OpportunityCardData) => void;
+  onAssign: (opportunity: OpportunityCardData, userId: string | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: opportunity.id,
@@ -153,6 +163,56 @@ export function OpportunityCard({
           </span>
         </div>
       )}
+
+      <div className="mt-1.5 flex items-center justify-between gap-1.5">
+        {lastContact ? (
+          <span
+            className="flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground"
+            title={`${lastContact.user_name ?? "Σύστημα"} · ${formatRelativeTime(lastContact.created_at)}`}
+          >
+            <Phone className="size-3 shrink-0" />
+            <span className="truncate">
+              {lastContact.user_name ?? "Σύστημα"} · {formatRelativeTime(lastContact.created_at)}
+            </span>
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground/70">
+            <PhoneOff className="size-3 shrink-0" />
+            Χωρίς επαφή
+          </span>
+        )}
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" aria-label="Ανάθεση lead" className="shrink-0 rounded-full">
+              <UserAvatar
+                user={
+                  opportunity.assigned_to
+                    ? { id: opportunity.assigned_to, display_name: opportunity.assigned_to_name, color: null }
+                    : null
+                }
+                size="sm"
+              />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {profiles.map((p) => (
+              <DropdownMenuItem key={p.id} onClick={() => onAssign(opportunity, p.id)}>
+                <UserAvatar user={p} size="sm" />
+                {p.display_name}
+              </DropdownMenuItem>
+            ))}
+            {opportunity.assigned_to && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onAssign(opportunity, null)}>
+                  Αφαίρεση ανάθεσης
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }

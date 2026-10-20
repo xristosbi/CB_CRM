@@ -8,6 +8,8 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { UserLabel } from "@/components/users/user-label";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import {
   addNote,
   addTask,
@@ -17,7 +19,10 @@ import {
   updateActivityContent,
   updateContactWithLog,
 } from "@/lib/queries/contacts";
+import { updateOpportunityAssignment } from "@/lib/queries/leads";
 import { createClient } from "@/lib/supabase/client";
+import { formatRelativeTime } from "@/lib/relative-time";
+import { describeError } from "@/lib/errors";
 import { toHref } from "@/lib/utils";
 import type {
   ActivityEntry,
@@ -66,11 +71,48 @@ export function ContactDetailView({
   usingMockData: boolean;
 }) {
   const router = useRouter();
+  const { currentUser, profiles } = useCurrentUser();
   const [contact, setContact] = useState(initialContact);
   const [activity, setActivity] = useState(initialActivity);
+  const [opportunities, setOpportunities] = useState(initialOpportunities);
   const [tasks, setTasks] = useState(initialTasks);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteContactOpen, setDeleteContactOpen] = useState(false);
+  const [assignBanner, setAssignBanner] = useState<string | null>(null);
+
+  const lastContact = [...activity]
+    .filter((a) => (a.type === "call" || a.type === "note") && a.user_id)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+
+  const contactsByUser = new Map<string, number>();
+  for (const a of activity) {
+    if ((a.type !== "call" && a.type !== "note") || !a.user_id) continue;
+    contactsByUser.set(a.user_id, (contactsByUser.get(a.user_id) ?? 0) + 1);
+  }
+  const contactsByUserList = Array.from(contactsByUser.entries()).map(([userId, count]) => ({
+    name: profiles.find((p) => p.id === userId)?.display_name ?? "—",
+    count,
+  }));
+
+  async function handleAssignOpportunity(opportunityId: string, userId: string | null) {
+    const previous = opportunities.find((o) => o.id === opportunityId);
+    const nextName = userId ? profiles.find((p) => p.id === userId)?.display_name ?? null : null;
+    setOpportunities((prev) =>
+      prev.map((o) => (o.id === opportunityId ? { ...o, assigned_to: userId, assigned_to_name: nextName } : o))
+    );
+
+    if (usingMockData) return;
+
+    try {
+      const supabase = createClient();
+      await updateOpportunityAssignment(supabase, opportunityId, userId);
+    } catch (err) {
+      if (previous) {
+        setOpportunities((prev) => prev.map((o) => (o.id === opportunityId ? previous : o)));
+      }
+      setAssignBanner(`Η ανάθεση απέτυχε. ${describeError(err)}`);
+    }
+  }
 
   async function handleUpdateContact(values: ContactFormValues) {
     const changed = contactChanged(contact, values);
@@ -84,7 +126,7 @@ export function ContactDetailView({
 
     try {
       const supabase = createClient();
-      const updated = await updateContactWithLog(supabase, contact.id, values, true);
+      const updated = await updateContactWithLog(supabase, contact.id, values, true, currentUser.id);
       setContact(updated);
       setActivity((prev) => [
         {
@@ -92,6 +134,8 @@ export function ContactDetailView({
           opportunity_id: null,
           type: "note",
           content: "Ενημερώθηκαν στοιχεία επικοινωνίας",
+          user_id: currentUser.id,
+          user_name: currentUser.display_name,
           created_at: new Date().toISOString(),
         },
         ...prev,
@@ -110,6 +154,8 @@ export function ContactDetailView({
           opportunity_id: null,
           type: "note",
           content,
+          user_id: currentUser.id,
+          user_name: currentUser.display_name,
           created_at: new Date().toISOString(),
         },
         ...prev,
@@ -120,7 +166,7 @@ export function ContactDetailView({
 
     try {
       const supabase = createClient();
-      const created = await addNote(supabase, contact.id, content);
+      const created = await addNote(supabase, contact.id, content, currentUser.id);
       setActivity((prev) => [created, ...prev]);
       toast.success("Η σημείωση αποθηκεύτηκε.");
     } catch {
@@ -298,14 +344,61 @@ export function ContactDetailView({
             ))}
           </div>
         )}
+        {(lastContact || contactsByUserList.length > 0) && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {lastContact && (
+              <span className="inline-flex items-center gap-1.5">
+                Τελευταία επαφή:
+                <UserLabel
+                  user={profiles.find((p) => p.id === lastContact.user_id) ?? null}
+                  size="sm"
+                  className="text-foreground"
+                />
+                · {formatRelativeTime(lastContact.created_at)}
+              </span>
+            )}
+            {contactsByUserList.length > 0 && (
+              <span>
+                Επαφές ανά χρήστη:{" "}
+                {contactsByUserList.map((c, i) => (
+                  <span key={c.name}>
+                    {i > 0 && ", "}
+                    {c.name} {c.count}
+                  </span>
+                ))}
+              </span>
+            )}
+          </div>
+        )}
       </div>
+
+      {assignBanner && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive"
+        >
+          <p className="flex-1">{assignBanner}</p>
+          <button
+            type="button"
+            onClick={() => setAssignBanner(null)}
+            aria-label="Κλείσιμο μηνύματος"
+            className="shrink-0 rounded p-0.5 opacity-70 hover:opacity-100"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
         <div className="flex flex-col gap-6">
           <section>
             <h2 className="text-sm font-semibold text-muted-foreground">Opportunities</h2>
             <div className="mt-2">
-              <OpportunitiesList opportunities={initialOpportunities} />
+              <OpportunitiesList
+                opportunities={opportunities}
+                profiles={profiles}
+                onAssign={handleAssignOpportunity}
+              />
             </div>
           </section>
 
@@ -321,7 +414,7 @@ export function ContactDetailView({
 
           <AppointmentsSection
             contact={contact}
-            opportunities={initialOpportunities}
+            opportunities={opportunities}
             initialEvents={initialAppointments}
             usingMockData={usingMockData}
             onActivityLogged={handleAppointmentActivityLogged}

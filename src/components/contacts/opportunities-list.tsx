@@ -1,7 +1,15 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
-import type { ContactOpportunity } from "@/lib/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { UserLabel } from "@/components/users/user-label";
+import type { ContactOpportunity, Profile } from "@/lib/types";
 
 const currency = new Intl.NumberFormat("el-GR", {
   style: "currency",
@@ -11,8 +19,12 @@ const currency = new Intl.NumberFormat("el-GR", {
 
 export function OpportunitiesList({
   opportunities,
+  profiles,
+  onAssign,
 }: {
   opportunities: ContactOpportunity[];
+  profiles: Profile[];
+  onAssign: (opportunityId: string, userId: string | null) => void;
 }) {
   if (opportunities.length === 0) {
     return (
@@ -25,12 +37,11 @@ export function OpportunitiesList({
   return (
     <div className="flex flex-col gap-2">
       {opportunities.map((opp) => (
-        <Link
+        <div
           key={opp.id}
-          href="/leads"
           className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm hover:bg-accent/40"
         >
-          <div className="flex flex-wrap items-center gap-2">
+          <Link href="/leads" className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{opp.pipeline_name}</Badge>
             <span className="text-muted-foreground">→</span>
             <span className="font-medium">{opp.stage_name}</span>
@@ -42,11 +53,41 @@ export function OpportunitiesList({
             {opp.campaign && (
               <span className="text-xs text-muted-foreground">({opp.campaign})</span>
             )}
+          </Link>
+          <div className="flex items-center gap-3">
+            {opp.value != null && <span className="font-medium">{currency.format(opp.value)}</span>}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="rounded-md text-xs hover:bg-accent/60">
+                  <UserLabel
+                    user={
+                      opp.assigned_to
+                        ? { id: opp.assigned_to, display_name: opp.assigned_to_name, color: null }
+                        : null
+                    }
+                    size="sm"
+                    unassignedLabel="Υπεύθυνος: —"
+                  />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {profiles.map((p) => (
+                  <DropdownMenuItem key={p.id} onClick={() => onAssign(opp.id, p.id)}>
+                    <UserLabel user={p} size="sm" />
+                  </DropdownMenuItem>
+                ))}
+                {opp.assigned_to && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => onAssign(opp.id, null)}>
+                      Αφαίρεση ανάθεσης
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          {opp.value != null && (
-            <span className="font-medium">{currency.format(opp.value)}</span>
-          )}
-        </Link>
+        </div>
       ))}
     </div>
   );

@@ -5,8 +5,16 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { describeError } from "@/lib/errors";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import {
   addDaysAthens,
   addMonthsAthens,
@@ -61,14 +69,23 @@ export function CalendarView({
   usingMockData: boolean;
 }) {
   const router = useRouter();
+  const { currentUser, profiles } = useCurrentUser();
   const [events, setEvents] = useState(initialEvents);
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
+  const [assigneeFilter, setAssigneeFilter] = useState<"all" | "me">(
+    currentUser.role === "admin" ? "all" : "me"
+  );
   const [dialogState, setDialogState] = useState<
     { mode: "create"; defaultStart: Date } | { mode: "edit"; event: CalendarEvent } | null
   >(null);
   const [deleteTarget, setDeleteTarget] = useState<CalendarEvent | null>(null);
   const [banner, setBanner] = useState<{ tone: "error" | "warning"; message: string } | null>(null);
+
+  const visibleEvents = useMemo(
+    () => (assigneeFilter === "me" ? events.filter((e) => e.assigned_to === currentUser.id) : events),
+    [events, assigneeFilter, currentUser.id]
+  );
 
   const opportunityOptions = useMemo<OpportunityOption[]>(() => {
     const pipelineNameById = new Map(pipelines.map((p) => [p.id, p.name]));
@@ -140,6 +157,10 @@ export function CalendarView({
             opportunity_id: row.opportunity_id,
             notes: row.notes,
             google_event_id: row.google_event_id,
+            assigned_to: row.assigned_to,
+            assigned_to_name: row.assigned_to
+              ? profiles.find((p) => p.id === row.assigned_to)?.display_name ?? null
+              : null,
           };
 
           setEvents((prev) => {
@@ -156,7 +177,7 @@ export function CalendarView({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [usingMockData]);
+  }, [usingMockData, profiles]);
 
   function goToday() {
     setAnchorDate(new Date());
@@ -198,6 +219,9 @@ export function CalendarView({
 
     if (usingMockData) {
       const contact = values.contact_id ? contacts.find((c) => c.id === values.contact_id) : null;
+      const assigneeName = values.assigned_to
+        ? profiles.find((p) => p.id === values.assigned_to)?.display_name ?? null
+        : null;
       if (editingId) {
         setEvents((prev) =>
           prev.map((e) =>
@@ -208,6 +232,7 @@ export function CalendarView({
                   contact_name: contact?.name ?? null,
                   contact_phone: contact?.phone ?? null,
                   contact_email: contact?.email ?? null,
+                  assigned_to_name: assigneeName,
                 }
               : e
           )
@@ -221,6 +246,7 @@ export function CalendarView({
             contact_name: contact?.name ?? null,
             contact_phone: contact?.phone ?? null,
             contact_email: contact?.email ?? null,
+            assigned_to_name: assigneeName,
             google_event_id: null,
           },
         ]);
@@ -248,6 +274,7 @@ export function CalendarView({
             opportunity_id: values.opportunity_id,
             type: "note",
             content: buildAppointmentLogContent(values.type, values.starts_at),
+            user_id: currentUser.id,
           });
         } catch (err) {
           reportIssue(
@@ -355,6 +382,15 @@ export function CalendarView({
           </Tabs>
 
           <div className="flex flex-wrap items-center gap-3">
+            <Select value={assigneeFilter} onValueChange={(v) => setAssigneeFilter(v as "all" | "me")}>
+              <SelectTrigger size="sm" className="w-auto gap-1.5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Όλοι</SelectItem>
+                <SelectItem value="me">Εγώ</SelectItem>
+              </SelectContent>
+            </Select>
             {CALENDAR_EVENT_TYPES.map((t) => (
               <span key={t} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className={cn("size-2 rounded-full", CALENDAR_EVENT_TYPE_COLORS[t].dot)} />
@@ -398,7 +434,7 @@ export function CalendarView({
         {viewMode === "month" && (
           <MonthView
             anchorDate={anchorDate}
-            events={events}
+            events={visibleEvents}
             tasks={initialTasks}
             onSlotClick={openCreateDialog}
             onEventClick={openEditDialog}
@@ -408,7 +444,7 @@ export function CalendarView({
         {viewMode === "week" && (
           <WeekView
             anchorDate={anchorDate}
-            events={events}
+            events={visibleEvents}
             tasks={initialTasks}
             onSlotClick={openCreateDialog}
             onEventClick={openEditDialog}
@@ -418,7 +454,7 @@ export function CalendarView({
         {viewMode === "day" && (
           <DayView
             anchorDate={anchorDate}
-            events={events}
+            events={visibleEvents}
             tasks={initialTasks}
             onSlotClick={openCreateDialog}
             onEventClick={openEditDialog}
@@ -428,7 +464,7 @@ export function CalendarView({
         {viewMode === "agenda" && (
           <AgendaView
             anchorDate={anchorDate}
-            events={events}
+            events={visibleEvents}
             tasks={initialTasks}
             onEventClick={openEditDialog}
           />

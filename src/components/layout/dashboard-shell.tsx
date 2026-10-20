@@ -8,20 +8,14 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { SidebarNav } from "./sidebar-nav";
 
-export function DashboardShell({
-  email,
-  children,
-}: {
-  email: string | null;
-  children: ReactNode;
-}) {
+export function DashboardShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <div className="flex min-h-svh w-full">
       <aside className="hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:block">
         <div className="sticky top-0 h-svh">
-          <SidebarNav email={email} />
+          <SidebarNav />
         </div>
       </aside>
 
@@ -57,7 +51,7 @@ export function DashboardShell({
           <SheetHeader className="sr-only">
             <SheetTitle>Πλοήγηση</SheetTitle>
           </SheetHeader>
-          <SidebarNav email={email} onNavigate={() => setMobileOpen(false)} />
+          <SidebarNav onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
       </Sheet>
     </div>

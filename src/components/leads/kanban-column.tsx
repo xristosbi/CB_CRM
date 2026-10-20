@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { OpportunityCard as OpportunityCardData, Stage } from "@/lib/types";
+import type { LastContactInfo } from "@/lib/queries/leads";
+import type { OpportunityCard as OpportunityCardData, Profile, Stage } from "@/lib/types";
 import { OpportunityCard } from "./opportunity-card";
 
 const currency = new Intl.NumberFormat("el-GR", {
@@ -29,10 +30,13 @@ export function KanbanColumn({
   opportunities,
   activeDragType,
   nextAppointmentByContact,
+  lastContactByContact,
+  profiles,
   onQuickCall,
   onQuickNote,
   onEditOpportunity,
   onDeleteOpportunity,
+  onAssignOpportunity,
   onRenameStage,
   onDeleteStage,
 }: {
@@ -40,10 +44,13 @@ export function KanbanColumn({
   opportunities: OpportunityCardData[];
   activeDragType: "card" | "column" | null;
   nextAppointmentByContact?: Map<string, string>;
+  lastContactByContact?: Map<string, LastContactInfo>;
+  profiles: Profile[];
   onQuickCall: (opportunity: OpportunityCardData) => void;
   onQuickNote: (opportunity: OpportunityCardData) => void;
   onEditOpportunity: (opportunity: OpportunityCardData) => void;
   onDeleteOpportunity: (opportunity: OpportunityCardData) => void;
+  onAssignOpportunity: (opportunity: OpportunityCardData, userId: string | null) => void;
   onRenameStage: (stageId: string, name: string) => void;
   onDeleteStage: (stage: Stage) => void;
 }) {
@@ -200,10 +207,13 @@ export function KanbanColumn({
             key={opportunity.id}
             opportunity={opportunity}
             nextAppointmentAt={nextAppointmentByContact?.get(opportunity.contact_id) ?? null}
+            lastContact={lastContactByContact?.get(opportunity.contact_id) ?? null}
+            profiles={profiles}
             onQuickCall={onQuickCall}
             onQuickNote={onQuickNote}
             onEdit={onEditOpportunity}
             onDelete={onDeleteOpportunity}
+            onAssign={onAssignOpportunity}
           />
         ))}
         {opportunities.length === 0 && (

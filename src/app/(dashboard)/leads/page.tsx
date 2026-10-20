@@ -1,6 +1,8 @@
 import { LeadsBoard } from "@/components/leads/leads-board";
 import { computeNextAppointmentByContact } from "@/lib/calendar-event-types";
+import { computeLastContactByContact } from "@/lib/last-contact";
 import {
+  MOCK_ACTIVITY,
   MOCK_CALENDAR_EVENTS,
   MOCK_CAMPAIGNS,
   MOCK_OPPORTUNITIES,
@@ -8,7 +10,7 @@ import {
   MOCK_STAGES,
 } from "@/lib/mock-data";
 import { fetchNextAppointmentByContact } from "@/lib/queries/calendar";
-import { fetchLeadsData } from "@/lib/queries/leads";
+import { fetchLastContactByContact, fetchLeadsData } from "@/lib/queries/leads";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 
@@ -21,6 +23,7 @@ export default async function LeadsPage() {
         initialCampaigns={MOCK_CAMPAIGNS}
         initialOpportunities={MOCK_OPPORTUNITIES}
         initialNextAppointmentByContact={computeNextAppointmentByContact(MOCK_CALENDAR_EVENTS)}
+        initialLastContactByContact={computeLastContactByContact(MOCK_ACTIVITY)}
         usingMockData
       />
     );
@@ -31,6 +34,8 @@ export default async function LeadsPage() {
     fetchLeadsData(supabase),
     fetchNextAppointmentByContact(supabase),
   ]);
+  const contactIds = Array.from(new Set(opportunities.map((o) => o.contact_id)));
+  const lastContactByContact = await fetchLastContactByContact(supabase, contactIds);
 
   return (
     <LeadsBoard
@@ -39,6 +44,7 @@ export default async function LeadsPage() {
       initialCampaigns={campaigns}
       initialOpportunities={opportunities}
       initialNextAppointmentByContact={Object.fromEntries(nextAppointmentByContact)}
+      initialLastContactByContact={Object.fromEntries(lastContactByContact)}
       usingMockData={false}
     />
   );

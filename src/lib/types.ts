@@ -1,4 +1,16 @@
-import type { ActivityType, CalendarEventType, PaymentStatus } from "@/lib/database.types";
+import type { ActivityType, CalendarEventType, PaymentStatus, UserRole } from "@/lib/database.types";
+
+// role is an internal authorization primitive — never render it as text.
+// Only display_name is shown anywhere in the UI.
+export interface Profile {
+  id: string;
+  full_name: string | null;
+  display_name: string | null;
+  email: string | null;
+  role: UserRole;
+  color: string | null;
+  created_at: string;
+}
 
 export interface Pipeline {
   id: string;
@@ -31,6 +43,8 @@ export interface OpportunityCard {
   campaign_id: string | null;
   pipeline_id: string;
   stage_id: string;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
   created_at: string;
 }
 
@@ -54,6 +68,8 @@ export interface ContactOpportunity {
   value: number | null;
   campaign: string | null;
   campaign_entity_name: string | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
 }
 
 export interface ActivityEntry {
@@ -61,6 +77,8 @@ export interface ActivityEntry {
   opportunity_id: string | null;
   type: ActivityType;
   content: string | null;
+  user_id: string | null;
+  user_name: string | null;
   created_at: string;
 }
 
@@ -105,6 +123,8 @@ export interface CalendarEvent {
   opportunity_id: string | null;
   notes: string | null;
   google_event_id: string | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
 }
 
 export interface Expense {

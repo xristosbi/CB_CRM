@@ -9,6 +9,7 @@ import {
 } from "@/lib/calendar-event-types";
 import { formatAthensTime } from "@/lib/calendar-tz";
 import { cn } from "@/lib/utils";
+import { UserAvatar } from "@/components/users/user-avatar";
 import type { CalendarEvent, CalendarTaskEntry } from "@/lib/types";
 
 // Compact chip for Month/Week/Day grid cells.
@@ -75,6 +76,14 @@ export function EventRow({ event, onEdit }: { event: CalendarEvent; onEdit: () =
           <span className={cn("text-xs font-medium", colors.text)}>
             {CALENDAR_EVENT_TYPE_LABELS[event.type]}
           </span>
+          <UserAvatar
+            user={
+              event.assigned_to
+                ? { id: event.assigned_to, display_name: event.assigned_to_name, color: null }
+                : null
+            }
+            size="sm"
+          />
         </div>
         <p className="mt-0.5 truncate text-sm font-medium">{event.title}</p>
         {event.notes && (

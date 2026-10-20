@@ -22,10 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Contact, Pipeline, Stage } from "@/lib/types";
+import type { Contact, Pipeline, Profile, Stage } from "@/lib/types";
 
 const PRESET_SOURCES = ["Facebook", "Instagram", "Referral", "Google Ads", "Website"];
 const NO_PIPELINE = "none";
+const UNASSIGNED = "unassigned";
 
 export interface ContactFormValues {
   name: string;
@@ -39,6 +40,7 @@ export interface ContactFormValues {
 export interface OpportunitySelection {
   pipeline_id: string;
   stage_id: string;
+  assigned_to: string | null;
 }
 
 export function ContactDialog({
@@ -49,6 +51,8 @@ export function ContactDialog({
   pipelines,
   stages,
   defaultPipelineId,
+  profiles,
+  currentUserId,
   onSubmit,
 }: {
   open: boolean;
@@ -58,6 +62,9 @@ export function ContactDialog({
   pipelines?: Pipeline[];
   stages?: Stage[];
   defaultPipelineId?: string | null;
+  // Only used in create mode, to default + offer the "Υπεύθυνος" field.
+  profiles?: Profile[];
+  currentUserId?: string | null;
   onSubmit: (
     values: ContactFormValues,
     opportunity: OpportunitySelection | null
@@ -73,6 +80,8 @@ export function ContactDialog({
             pipelines={pipelines ?? []}
             stages={stages ?? []}
             defaultPipelineId={defaultPipelineId ?? null}
+            profiles={profiles ?? []}
+            currentUserId={currentUserId ?? null}
             onSubmit={onSubmit}
             onClose={() => onOpenChange(false)}
           />
@@ -92,6 +101,8 @@ function ContactForm({
   pipelines,
   stages,
   defaultPipelineId,
+  profiles,
+  currentUserId,
   onSubmit,
   onClose,
 }: {
@@ -100,6 +111,8 @@ function ContactForm({
   pipelines: Pipeline[];
   stages: Stage[];
   defaultPipelineId: string | null;
+  profiles: Profile[];
+  currentUserId: string | null;
   onSubmit: (
     values: ContactFormValues,
     opportunity: OpportunitySelection | null
@@ -128,6 +141,7 @@ function ContactForm({
   const [tagInput, setTagInput] = useState("");
   const [pipelineId, setPipelineId] = useState(initialPipelineId);
   const [stageId, setStageId] = useState(initialStageId);
+  const [assignedTo, setAssignedTo] = useState(currentUserId ?? UNASSIGNED);
   const [submitting, setSubmitting] = useState(false);
 
   const stagesForPipeline = stages
@@ -181,7 +195,7 @@ function ContactForm({
 
     const opportunity: OpportunitySelection | null =
       mode === "create" && pipelineId !== NO_PIPELINE && stageId
-        ? { pipeline_id: pipelineId, stage_id: stageId }
+        ? { pipeline_id: pipelineId, stage_id: stageId, assigned_to: assignedTo === UNASSIGNED ? null : assignedTo }
         : null;
 
     setSubmitting(true);
@@ -319,6 +333,25 @@ function ContactForm({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        )}
+
+        {mode === "create" && profiles.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <Label>Υπεύθυνος</Label>
+            <Select value={assignedTo} onValueChange={setAssignedTo}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNASSIGNED}>Μη ανατεθειμένο</SelectItem>
+                {profiles.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.display_name ?? "—"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
       </div>

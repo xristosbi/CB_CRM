@@ -1,6 +1,8 @@
 export type ActivityType = "call" | "note" | "stage_change" | "fathom_summary" | "payment";
 export type PaymentStatus = "pending" | "paid" | "cancelled";
 export type CalendarEventType = "sales_call" | "setting_call" | "follow_up" | "other";
+// Internal authorization primitive only — never rendered as text in the UI.
+export type UserRole = "admin" | "setter";
 
 export interface Database {
   public: {
@@ -80,6 +82,7 @@ export interface Database {
           value: number | null;
           campaign: string | null;
           campaign_id: string | null;
+          assigned_to: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -91,6 +94,7 @@ export interface Database {
           value?: number | null;
           campaign?: string | null;
           campaign_id?: string | null;
+          assigned_to?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -124,6 +128,13 @@ export interface Database {
             referencedRelation: "campaigns";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "opportunities_assigned_to_fkey";
+            columns: ["assigned_to"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
         ];
       };
       activity_log: {
@@ -133,6 +144,7 @@ export interface Database {
           opportunity_id: string | null;
           type: ActivityType;
           content: string | null;
+          user_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -141,6 +153,7 @@ export interface Database {
           opportunity_id?: string | null;
           type: ActivityType;
           content?: string | null;
+          user_id?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["activity_log"]["Insert"]>;
@@ -159,7 +172,36 @@ export interface Database {
             referencedRelation: "opportunities";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "activity_log_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
         ];
+      };
+      profiles: {
+        Row: {
+          id: string;
+          full_name: string | null;
+          display_name: string | null;
+          email: string | null;
+          role: UserRole;
+          color: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          full_name?: string | null;
+          display_name?: string | null;
+          email?: string | null;
+          role?: UserRole;
+          color?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
+        Relationships: [];
       };
       payments: {
         Row: {
@@ -304,6 +346,7 @@ export interface Database {
           opportunity_id: string | null;
           notes: string | null;
           google_event_id: string | null;
+          assigned_to: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -317,6 +360,7 @@ export interface Database {
           opportunity_id?: string | null;
           notes?: string | null;
           google_event_id?: string | null;
+          assigned_to?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -336,6 +380,13 @@ export interface Database {
             referencedRelation: "opportunities";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "calendar_events_assigned_to_fkey";
+            columns: ["assigned_to"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
         ];
       };
     };
@@ -348,6 +399,10 @@ export interface Database {
       activate_campaign: {
         Args: { p_campaign_id: string };
         Returns: Database["public"]["Tables"]["campaigns"]["Row"];
+      };
+      is_admin: {
+        Args: Record<string, never>;
+        Returns: boolean;
       };
     };
     Enums: {

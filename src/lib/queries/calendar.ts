@@ -6,8 +6,8 @@ import type { CalendarEvent } from "@/lib/types";
 type TypedClient = SupabaseClient<Database>;
 
 const EVENT_COLUMNS =
-  "id, title, starts_at, ends_at, type, contact_id, opportunity_id, notes, google_event_id";
-const EVENT_SELECT = `${EVENT_COLUMNS}, contacts(name, phone, email)`;
+  "id, title, starts_at, ends_at, type, contact_id, opportunity_id, notes, google_event_id, assigned_to";
+const EVENT_SELECT = `${EVENT_COLUMNS}, contacts(name, phone, email), profiles(display_name)`;
 
 interface EventRow {
   id: string;
@@ -19,14 +19,17 @@ interface EventRow {
   opportunity_id: string | null;
   notes: string | null;
   google_event_id: string | null;
+  assigned_to: string | null;
   contacts:
     | { name: string; phone: string | null; email: string | null }
     | { name: string; phone: string | null; email: string | null }[]
     | null;
+  profiles: { display_name: string | null } | { display_name: string | null }[] | null;
 }
 
 function mapRow(row: EventRow): CalendarEvent {
   const contact = Array.isArray(row.contacts) ? row.contacts[0] : row.contacts;
+  const assignee = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
   return {
     id: row.id,
     title: row.title,
@@ -40,6 +43,8 @@ function mapRow(row: EventRow): CalendarEvent {
     opportunity_id: row.opportunity_id,
     notes: row.notes,
     google_event_id: row.google_event_id,
+    assigned_to: row.assigned_to,
+    assigned_to_name: assignee?.display_name ?? null,
   };
 }
 
@@ -96,6 +101,7 @@ export interface CalendarEventInput {
   contact_id: string | null;
   opportunity_id: string | null;
   notes: string | null;
+  assigned_to: string | null;
 }
 
 // Selecting back the embedded `contacts(...)` relation doesn't play well

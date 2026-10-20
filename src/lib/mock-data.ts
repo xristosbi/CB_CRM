@@ -8,8 +8,34 @@ import type {
   OpportunityCard,
   Payment,
   Pipeline,
+  Profile,
   Stage,
 } from "@/lib/types";
+
+// Two demo users: "CB" (full access) and "ΓΠ" (the setting-calls partner,
+// limited access). role is internal-only — never shown as text in the UI.
+export const MOCK_PROFILES: Profile[] = [
+  {
+    id: "user-cb",
+    full_name: "Chris B.",
+    display_name: "CB",
+    email: "chris@cbautomations.gr",
+    role: "admin",
+    color: null,
+    created_at: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "user-gp",
+    full_name: "Γιάννης Πετρίδης",
+    display_name: "ΓΠ",
+    email: "giannis@cbautomations.gr",
+    role: "setter",
+    color: null,
+    created_at: "2026-02-01T00:00:00.000Z",
+  },
+];
+
+export const MOCK_CURRENT_USER: Profile = MOCK_PROFILES[0];
 
 export const MOCK_PIPELINES: Pipeline[] = [
   { id: "pl-chatbot", name: "Chatbot" },
@@ -55,6 +81,8 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign_id: "pl-chatbot-campaign-1",
     pipeline_id: "pl-chatbot",
     stage_id: "pl-chatbot-stage-1",
+    assigned_to: "user-cb",
+    assigned_to_name: "CB",
     created_at: "2026-08-06T09:00:00.000Z",
   },
   {
@@ -67,6 +95,8 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign_id: "pl-chatbot-campaign-1",
     pipeline_id: "pl-chatbot",
     stage_id: "pl-chatbot-stage-0",
+    assigned_to: "user-gp",
+    assigned_to_name: "ΓΠ",
     created_at: "2026-08-10T10:00:00.000Z",
   },
   {
@@ -79,6 +109,8 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign_id: "pl-voice-campaign-1",
     pipeline_id: "pl-voice",
     stage_id: "pl-voice-stage-2",
+    assigned_to: null,
+    assigned_to_name: null,
     created_at: "2026-07-22T14:00:00.000Z",
   },
   {
@@ -91,6 +123,8 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign_id: "pl-chatbot-campaign-1",
     pipeline_id: "pl-chatbot",
     stage_id: "pl-chatbot-stage-3",
+    assigned_to: "user-gp",
+    assigned_to_name: "ΓΠ",
     created_at: "2026-07-15T11:00:00.000Z",
   },
   {
@@ -103,6 +137,8 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign_id: "pl-reviews-campaign-1",
     pipeline_id: "pl-reviews",
     stage_id: "pl-reviews-stage-0",
+    assigned_to: "user-cb",
+    assigned_to_name: "CB",
     created_at: "2026-08-11T16:00:00.000Z",
   },
   {
@@ -115,6 +151,8 @@ export const MOCK_OPPORTUNITIES: OpportunityCard[] = [
     campaign_id: "pl-voice-campaign-1",
     pipeline_id: "pl-voice",
     stage_id: "pl-voice-stage-0",
+    assigned_to: null,
+    assigned_to_name: null,
     created_at: "2026-06-25T08:30:00.000Z",
   },
 ];
@@ -179,6 +217,8 @@ export const MOCK_ACTIVITY: (ActivityEntry & { contact_id: string })[] = [
     opportunity_id: "opp-1",
     type: "note",
     content: "Πρώτη επικοινωνία, ενδιαφέρον για chatbot στο site.",
+    user_id: "user-cb",
+    user_name: "CB",
     created_at: "2026-08-06T09:10:00.000Z",
   },
   {
@@ -187,6 +227,8 @@ export const MOCK_ACTIVITY: (ActivityEntry & { contact_id: string })[] = [
     opportunity_id: "opp-1",
     type: "stage_change",
     content: "Νέο Lead → Επικοινωνία",
+    user_id: "user-cb",
+    user_name: "CB",
     created_at: "2026-08-06T09:11:00.000Z",
   },
   {
@@ -195,6 +237,8 @@ export const MOCK_ACTIVITY: (ActivityEntry & { contact_id: string })[] = [
     opportunity_id: "opp-1",
     type: "call",
     content: "Τηλεφωνική κλήση 12 λεπτά, θέλει demo την επόμενη εβδομάδα.",
+    user_id: "user-gp",
+    user_name: "ΓΠ",
     created_at: "2026-08-08T13:00:00.000Z",
   },
   {
@@ -203,6 +247,8 @@ export const MOCK_ACTIVITY: (ActivityEntry & { contact_id: string })[] = [
     opportunity_id: "opp-6",
     type: "fathom_summary",
     content: "Demo call: ενδιαφέρον για voice agent, follow-up σε 3 μέρες.",
+    user_id: null,
+    user_name: null,
     created_at: "2026-08-10T17:30:00.000Z",
   },
 ];
@@ -290,6 +336,8 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     opportunity_id: "opp-1",
     notes: "Παρουσίαση demo chatbot.",
     google_event_id: null,
+    assigned_to: "user-cb",
+    assigned_to_name: "CB",
   },
   {
     id: "cal-2",
@@ -304,6 +352,8 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     opportunity_id: "opp-3",
     notes: null,
     google_event_id: null,
+    assigned_to: "user-gp",
+    assigned_to_name: "ΓΠ",
   },
   {
     id: "cal-3",
@@ -318,6 +368,8 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     opportunity_id: "opp-4",
     notes: null,
     google_event_id: null,
+    assigned_to: "user-gp",
+    assigned_to_name: "ΓΠ",
   },
   {
     id: "cal-4",
@@ -332,6 +384,8 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     opportunity_id: null,
     notes: "Check-in χωρίς συγκεκριμένο θέμα.",
     google_event_id: null,
+    assigned_to: "user-cb",
+    assigned_to_name: "CB",
   },
   {
     id: "cal-5",
@@ -346,6 +400,8 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     opportunity_id: "opp-5",
     notes: null,
     google_event_id: null,
+    assigned_to: null,
+    assigned_to_name: null,
   },
   {
     id: "cal-6",
@@ -360,6 +416,8 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     opportunity_id: "opp-6",
     notes: "Ολοκληρώθηκε επιτυχώς.",
     google_event_id: null,
+    assigned_to: "user-cb",
+    assigned_to_name: "CB",
   },
 ];
 

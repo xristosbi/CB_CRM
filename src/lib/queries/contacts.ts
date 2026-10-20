@@ -11,9 +11,34 @@ interface OpportunityWithRelationsRow {
   stage_id: string;
   value: number | null;
   campaign: string | null;
+  assigned_to: string | null;
   pipelines: { name: string } | { name: string }[] | null;
   pipeline_stages: { name: string } | { name: string }[] | null;
   campaigns: { name: string } | { name: string }[] | null;
+  profiles: { display_name: string | null } | { display_name: string | null }[] | null;
+}
+
+interface ActivityRow {
+  id: string;
+  opportunity_id: string | null;
+  type: ActivityType;
+  content: string | null;
+  user_id: string | null;
+  created_at: string;
+  profiles: { display_name: string | null } | { display_name: string | null }[] | null;
+}
+
+function mapActivityRow(row: ActivityRow): ActivityEntry {
+  const user = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+  return {
+    id: row.id,
+    opportunity_id: row.opportunity_id,
+    type: row.type,
+    content: row.content,
+    user_id: row.user_id,
+    user_name: user?.display_name ?? null,
+    created_at: row.created_at,
+  };
 }
 
 export async function fetchContacts(supabase: TypedClient): Promise<Contact[]> {
@@ -47,16 +72,17 @@ export async function fetchContactDetail(
       supabase
         .from("opportunities")
         .select(
-          "id, pipeline_id, stage_id, value, campaign, pipelines(name), pipeline_stages(name), campaigns(name)"
+          "id, pipeline_id, stage_id, value, campaign, assigned_to, pipelines(name), pipeline_stages(name), campaigns(name), profiles(display_name)"
         )
         .eq("contact_id", contactId)
         .order("created_at", { ascending: false })
         .returns<OpportunityWithRelationsRow[]>(),
       supabase
         .from("activity_log")
-        .select("id, opportunity_id, type, content, created_at")
+        .select("id, opportunity_id, type, content, user_id, created_at, profiles(display_name)")
         .eq("contact_id", contactId)
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .returns<ActivityRow[]>(),
       supabase
         .from("tasks")
         .select("id, title, due_at, done, created_at")
@@ -74,6 +100,7 @@ export async function fetchContactDetail(
       const pipeline = Array.isArray(row.pipelines) ? row.pipelines[0] : row.pipelines;
       const stage = Array.isArray(row.pipeline_stages) ? row.pipeline_stages[0] : row.pipeline_stages;
       const campaignEntity = Array.isArray(row.campaigns) ? row.campaigns[0] : row.campaigns;
+      const assignee = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
       return {
         id: row.id,
         pipeline_id: row.pipeline_id,
@@ -83,9 +110,11 @@ export async function fetchContactDetail(
         value: row.value,
         campaign: row.campaign,
         campaign_entity_name: campaignEntity?.name ?? null,
+        assigned_to: row.assigned_to,
+        assigned_to_name: assignee?.display_name ?? null,
       };
     }),
-    activity: activity ?? [],
+    activity: (activity ?? []).map(mapActivityRow),
     tasks: tasks ?? [],
   };
 }
@@ -125,14 +154,20 @@ export async function fetchUpcomingTasks(supabase: TypedClient): Promise<Calenda
     });
 }
 
-export async function addNote(supabase: TypedClient, contactId: string, content: string) {
+export async function addNote(
+  supabase: TypedClient,
+  contactId: string,
+  content: string,
+  userId?: string | null
+): Promise<ActivityEntry> {
   const { data, error } = await supabase
     .from("activity_log")
-    .insert({ contact_id: contactId, type: "note" as ActivityType, content })
-    .select("id, opportunity_id, type, content, created_at")
-    .single();
+    .insert({ contact_id: contactId, type: "note" as ActivityType, content, user_id: userId ?? null })
+    .select("id, opportunity_id, type, content, user_id, created_at, profiles(display_name)")
+    .returns<ActivityRow[]>();
   if (error) throw error;
-  return data;
+  if (!data || data.length === 0) throw new Error("activity_log insert returned no row");
+  return mapActivityRow(data[0]);
 }
 
 export async function addTask(
@@ -197,7 +232,13 @@ export async function updateContact(
 export async function createLead(
   supabase: TypedClient,
   contactInput: ContactInput,
-  opportunity: { pipeline_id: string; stage_id: string; campaign_id?: string | null } | null
+  opportunity: {
+    pipeline_id: string;
+    stage_id: string;
+    campaign_id?: string | null;
+    assigned_to?: string | null;
+  } | null,
+  userId?: string | null
 ): Promise<{ contact: Contact; opportunityId: string | null }> {
   const contact = await createContact(supabase, contactInput);
 
@@ -210,6 +251,7 @@ export async function createLead(
         pipeline_id: opportunity.pipeline_id,
         stage_id: opportunity.stage_id,
         campaign_id: opportunity.campaign_id ?? null,
+        assigned_to: opportunity.assigned_to ?? null,
       })
       .select("id")
       .single();
@@ -222,6 +264,7 @@ export async function createLead(
     opportunity_id: opportunityId,
     type: "note" as ActivityType,
     content: "Δημιουργήθηκε νέο lead",
+    user_id: userId ?? null,
   });
   if (activityError) throw activityError;
 
@@ -232,7 +275,8 @@ export async function updateContactWithLog(
   supabase: TypedClient,
   contactId: string,
   input: ContactInput,
-  logChange: boolean
+  logChange: boolean,
+  userId?: string | null
 ): Promise<Contact> {
   const contact = await updateContact(supabase, contactId, input);
   if (logChange) {
@@ -240,6 +284,7 @@ export async function updateContactWithLog(
       contact_id: contactId,
       type: "note" as ActivityType,
       content: "Ενημερώθηκαν στοιχεία επικοινωνίας",
+      user_id: userId ?? null,
     });
     if (error) throw error;
   }
