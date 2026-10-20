@@ -1,9 +1,19 @@
-import type { OpportunityCard, Stage } from "@/lib/types";
+import type { Stage } from "@/lib/types";
 
 export interface CampaignStats {
   leadsCount: number;
   wonCount: number;
   wonAmount: number;
+}
+
+// Structural, not the full OpportunityCard — campaigns-list-view only ever
+// fetches this minimal projection (no contact/attribution joins), while
+// campaign-detail-view passes the full OpportunityCard[] it already has
+// for its locked board; both satisfy this shape.
+export interface CampaignStatsOpportunity {
+  campaign_id: string | null;
+  stage_id: string;
+  value: number | null;
 }
 
 const EMPTY_STATS: CampaignStats = { leadsCount: 0, wonCount: 0, wonAmount: 0 };
@@ -13,7 +23,7 @@ const EMPTY_STATS: CampaignStats = { leadsCount: 0, wonCount: 0, wonAmount: 0 };
 // campaign's header stats (just one map lookup) so the two pages can never
 // drift on what counts as "won".
 export function computeCampaignStatsMap(
-  opportunities: OpportunityCard[],
+  opportunities: CampaignStatsOpportunity[],
   stages: Stage[]
 ): Map<string, CampaignStats> {
   const wonStageIds = new Set(stages.filter((s) => s.is_won).map((s) => s.id));

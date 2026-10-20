@@ -28,10 +28,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { computeCampaignStatsMap, getCampaignStats } from "@/lib/campaign-stats";
+import { computeCampaignStatsMap, getCampaignStats, type CampaignStatsOpportunity } from "@/lib/campaign-stats";
 import { useCampaignActions } from "@/lib/hooks/use-campaign-actions";
 import { cn } from "@/lib/utils";
-import type { Campaign, OpportunityCard, Pipeline, Stage } from "@/lib/types";
+import type { Campaign, Pipeline, Stage } from "@/lib/types";
+
+// Only campaign_id/stage_id/value are read on this page (per-campaign
+// counts + won amount) — the server only ever sends this light projection
+// now (see fetchOpportunitiesLight), no contact/profile joins.
+type CampaignListOpportunity = CampaignStatsOpportunity & { id: string };
 
 const dateFormatter = new Intl.DateTimeFormat("el-GR", {
   day: "2-digit",
@@ -55,7 +60,7 @@ export function CampaignsListView({
   initialPipelines: Pipeline[];
   initialStages: Stage[];
   initialCampaigns: Campaign[];
-  opportunities: OpportunityCard[];
+  opportunities: CampaignListOpportunity[];
   usingMockData: boolean;
 }) {
   const [campaigns, setCampaigns] = useState(initialCampaigns);

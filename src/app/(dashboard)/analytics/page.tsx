@@ -7,8 +7,9 @@ import {
   MOCK_PIPELINES,
   MOCK_STAGES,
 } from "@/lib/mock-data";
+import { fetchCampaigns } from "@/lib/queries/campaigns";
 import { fetchExpenses } from "@/lib/queries/expenses";
-import { fetchLeadsData } from "@/lib/queries/leads";
+import { fetchOpportunitiesForAnalytics, fetchPipelinesAndStages } from "@/lib/queries/leads";
 import { fetchPayments } from "@/lib/queries/payments";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
@@ -27,12 +28,17 @@ export default async function AnalyticsPage() {
       }
     : await (async () => {
         const supabase = await createClient();
-        const [leadsData, payments, expenses] = await Promise.all([
-          fetchLeadsData(supabase),
+        // Charts only ever read pipeline/stage/campaign ids, value,
+        // created_at and source — fetchOpportunitiesForAnalytics skips the
+        // profiles() join that the full fetchLeadsData carries for nothing.
+        const [{ pipelines, stages }, campaigns, opportunities, payments, expenses] = await Promise.all([
+          fetchPipelinesAndStages(supabase),
+          fetchCampaigns(supabase),
+          fetchOpportunitiesForAnalytics(supabase),
           fetchPayments(supabase),
           fetchExpenses(supabase),
         ]);
-        return { ...leadsData, payments, expenses };
+        return { pipelines, stages, campaigns, opportunities, payments, expenses };
       })();
 
   return (

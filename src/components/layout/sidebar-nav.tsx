@@ -1,12 +1,26 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
-import { NAV_ITEMS } from "./nav-items";
+import { NAV_ITEMS, type NavItem } from "./nav-items";
 import { UserMenu } from "./user-menu";
+
+// useLinkStatus() only works inside a child of the <Link> it belongs to —
+// it flips to pending synchronously on click, well before the new route's
+// data has resolved, giving instant feedback independent of loading.tsx.
+function NavLinkContent({ item }: { item: NavItem }) {
+  const { pending } = useLinkStatus();
+  const Icon = item.icon;
+  return (
+    <>
+      <Icon className={cn("size-4 shrink-0", pending && "animate-pulse")} />
+      <span className={cn(pending && "opacity-60")}>{item.label}</span>
+    </>
+  );
+}
 
 export function SidebarNav({
   onNavigate,
@@ -31,12 +45,12 @@ export function SidebarNav({
       <nav className="flex-1 space-y-1 px-2">
         {navItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
-          const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
               onClick={onNavigate}
+              prefetch
               className={cn(
                 "flex items-center gap-3 rounded-r-md border-l-2 px-3 py-2 text-sm font-medium transition-colors",
                 active
@@ -44,8 +58,7 @@ export function SidebarNav({
                   : "border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-brand-gold"
               )}
             >
-              <Icon className="size-4 shrink-0" />
-              {item.label}
+              <NavLinkContent item={item} />
             </Link>
           );
         })}

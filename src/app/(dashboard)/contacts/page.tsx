@@ -1,7 +1,7 @@
 import { ContactsPageView } from "@/components/contacts/contacts-page-view";
 import { MOCK_CONTACTS, MOCK_PIPELINES, MOCK_STAGES } from "@/lib/mock-data";
 import { fetchContacts } from "@/lib/queries/contacts";
-import { fetchLeadsData } from "@/lib/queries/leads";
+import { fetchPipelinesAndStages } from "@/lib/queries/leads";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,11 +12,15 @@ export default async function ContactsPage() {
     ? { contacts: MOCK_CONTACTS, pipelines: MOCK_PIPELINES, stages: MOCK_STAGES }
     : await (async () => {
         const supabase = await createClient();
-        const [contacts, leadsData] = await Promise.all([
+        // Contacts never renders a single opportunity — only the "new
+        // lead" dialog's pipeline/stage picker — so this never touches the
+        // opportunities table at all (previously fetchLeadsData pulled
+        // every opportunity with contact+profile joins just for this).
+        const [contacts, { pipelines, stages }] = await Promise.all([
           fetchContacts(supabase),
-          fetchLeadsData(supabase),
+          fetchPipelinesAndStages(supabase),
         ]);
-        return { contacts, pipelines: leadsData.pipelines, stages: leadsData.stages };
+        return { contacts, pipelines, stages };
       })();
 
   return (

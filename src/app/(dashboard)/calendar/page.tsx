@@ -9,7 +9,7 @@ import {
 } from "@/lib/mock-data";
 import { fetchUpcomingTasks, fetchContacts } from "@/lib/queries/contacts";
 import { fetchCalendarEvents } from "@/lib/queries/calendar";
-import { fetchLeadsData } from "@/lib/queries/leads";
+import { fetchOpportunitiesLight, fetchPipelinesAndStages } from "@/lib/queries/leads";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import type { CalendarTaskEntry } from "@/lib/types";
@@ -37,20 +37,16 @@ export default async function CalendarPage() {
       }
     : await (async () => {
         const supabase = await createClient();
-        const [events, tasks, contacts, leadsData] = await Promise.all([
+        // The event dialog's opportunity picker only needs
+        // id/contact_id/pipeline_id/stage_id — no contact/profile joins.
+        const [events, tasks, contacts, { pipelines, stages }, opportunities] = await Promise.all([
           fetchCalendarEvents(supabase),
           fetchUpcomingTasks(supabase),
           fetchContacts(supabase),
-          fetchLeadsData(supabase),
+          fetchPipelinesAndStages(supabase),
+          fetchOpportunitiesLight(supabase),
         ]);
-        return {
-          events,
-          tasks,
-          contacts,
-          pipelines: leadsData.pipelines,
-          stages: leadsData.stages,
-          opportunities: leadsData.opportunities,
-        };
+        return { events, tasks, contacts, pipelines, stages, opportunities };
       })();
 
   return (

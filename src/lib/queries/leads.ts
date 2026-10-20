@@ -79,6 +79,89 @@ export async function fetchLeadsData(supabase: TypedClient): Promise<{
   };
 }
 
+// Pipelines + stages only, no opportunities — for pages that need the
+// pipeline/stage picker (Πελάτες' "new lead" dialog) but never render a
+// single opportunity. Both tables are tiny, so this is just two small
+// parallel queries instead of a full opportunities scan with joins.
+export async function fetchPipelinesAndStages(supabase: TypedClient): Promise<{
+  pipelines: Pipeline[];
+  stages: Stage[];
+}> {
+  const [
+    { data: pipelines, error: pipelinesError },
+    { data: stages, error: stagesError },
+  ] = await Promise.all([
+    supabase.from("pipelines").select("id, name").order("created_at", { ascending: true }),
+    supabase
+      .from("pipeline_stages")
+      .select("id, pipeline_id, name, position, is_won")
+      .order("position", { ascending: true }),
+  ]);
+  if (pipelinesError) throw pipelinesError;
+  if (stagesError) throw stagesError;
+  return { pipelines: pipelines ?? [], stages: stages ?? [] };
+}
+
+export interface LightOpportunity {
+  id: string;
+  contact_id: string;
+  pipeline_id: string;
+  stage_id: string;
+  campaign_id: string | null;
+  value: number | null;
+}
+
+// No joins, no text/attribution columns — for callers that only need the
+// id/foreign-key shape, not the full kanban-card rendering: the calendar's
+// "pick an opportunity" picker and the campaigns list's per-campaign stats.
+export async function fetchOpportunitiesLight(supabase: TypedClient): Promise<LightOpportunity[]> {
+  const { data, error } = await supabase
+    .from("opportunities")
+    .select("id, contact_id, pipeline_id, stage_id, campaign_id, value")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+interface AnalyticsOpportunityRow {
+  id: string;
+  pipeline_id: string;
+  stage_id: string;
+  value: number | null;
+  campaign_id: string | null;
+  created_at: string;
+  contacts: { source: string | null } | { source: string | null }[] | null;
+}
+
+// Analytics' charts only ever read pipeline_id/campaign_id/stage_id/value/
+// created_at/source — never contact_name or assignment — so this skips the
+// profiles() join entirely and only pulls `source` from contacts().
+export async function fetchOpportunitiesForAnalytics(supabase: TypedClient): Promise<OpportunityCard[]> {
+  const { data, error } = await supabase
+    .from("opportunities")
+    .select("id, pipeline_id, stage_id, value, campaign_id, created_at, contacts(source)")
+    .order("created_at", { ascending: false })
+    .returns<AnalyticsOpportunityRow[]>();
+  if (error) throw error;
+  return (data ?? []).map((row) => {
+    const contact = Array.isArray(row.contacts) ? row.contacts[0] : row.contacts;
+    return {
+      id: row.id,
+      contact_id: "",
+      contact_name: "",
+      source: contact?.source ?? null,
+      value: row.value,
+      campaign: null,
+      campaign_id: row.campaign_id,
+      pipeline_id: row.pipeline_id,
+      stage_id: row.stage_id,
+      assigned_to: null,
+      assigned_to_name: null,
+      created_at: row.created_at,
+    };
+  });
+}
+
 export async function fetchContactSummary(supabase: TypedClient, contactId: string) {
   const { data, error } = await supabase
     .from("contacts")

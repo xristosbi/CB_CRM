@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   DndContext,
@@ -402,6 +402,16 @@ function LeadsBoardInner({
     lastContactByContact,
   ]);
 
+  // A ref, not a dependency: the realtime subscription itself should only
+  // ever be set up once per mount, not torn down and re-created every time
+  // someone's profile changes elsewhere (e.g. a Settings edit) while this
+  // page happens to stay open — the effect just needs the latest list when
+  // an event actually arrives.
+  const profilesRef = useRef(profiles);
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
+
   // Realtime: reflect leads created/moved elsewhere (e.g. via webhook) instantly.
   useEffect(() => {
     if (usingMockData) return;
@@ -431,7 +441,7 @@ function LeadsBoardInner({
             created_at: string;
           };
           const assigneeName = row.assigned_to
-            ? profiles.find((p) => p.id === row.assigned_to)?.display_name ?? null
+            ? profilesRef.current.find((p) => p.id === row.assigned_to)?.display_name ?? null
             : null;
 
           setOpportunities((prev) => {
@@ -488,7 +498,7 @@ function LeadsBoardInner({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [usingMockData, profiles]);
+  }, [usingMockData]);
 
   function handleDragStart(event: DragStartEvent) {
     const type = event.active.data.current?.type;

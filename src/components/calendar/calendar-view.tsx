@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 
@@ -38,7 +38,17 @@ import {
 import { insertActivity } from "@/lib/queries/leads";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import type { CalendarEvent, CalendarTaskEntry, Contact, OpportunityCard, Pipeline, Stage } from "@/lib/types";
+import type { CalendarEvent, CalendarTaskEntry, Contact, Pipeline, Stage } from "@/lib/types";
+
+// Only id/contact_id/pipeline_id/stage_id are read here (building the
+// event dialog's opportunity picker) — the server sends this light
+// projection now, not the full OpportunityCard with contact/profile joins.
+interface CalendarOpportunity {
+  id: string;
+  contact_id: string;
+  pipeline_id: string;
+  stage_id: string;
+}
 import type { Database } from "@/lib/database.types";
 import { toast } from "sonner";
 
@@ -65,7 +75,7 @@ export function CalendarView({
   contacts: Contact[];
   pipelines: Pipeline[];
   stages: Stage[];
-  opportunities: OpportunityCard[];
+  opportunities: CalendarOpportunity[];
   usingMockData: boolean;
 }) {
   const router = useRouter();
@@ -114,6 +124,14 @@ export function CalendarView({
     }
   }, []);
 
+  // A ref, not a dependency — see leads-board.tsx's identical comment: the
+  // subscription itself shouldn't tear down/recreate just because someone's
+  // profile changed elsewhere while this page stays open.
+  const profilesRef = useRef(profiles);
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
+
   // Realtime: reflect appointments created/changed elsewhere instantly —
   // in particular, step-2's inbound Make webhook writes via the service-role
   // client, so without this the calendar would only pick it up on refresh.
@@ -159,7 +177,7 @@ export function CalendarView({
             google_event_id: row.google_event_id,
             assigned_to: row.assigned_to,
             assigned_to_name: row.assigned_to
-              ? profiles.find((p) => p.id === row.assigned_to)?.display_name ?? null
+              ? profilesRef.current.find((p) => p.id === row.assigned_to)?.display_name ?? null
               : null,
           };
 
@@ -177,7 +195,7 @@ export function CalendarView({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [usingMockData, profiles]);
+  }, [usingMockData]);
 
   function goToday() {
     setAnchorDate(new Date());
