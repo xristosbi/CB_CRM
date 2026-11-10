@@ -10,13 +10,35 @@ interface OpportunityRow {
   contact_id: string;
   pipeline_id: string;
   stage_id: string;
-  value: number | null;
   campaign: string | null;
   campaign_id: string | null;
   assigned_to: string | null;
   created_at: string;
   contacts: { name: string; source: string | null } | { name: string; source: string | null }[] | null;
   profiles: { display_name: string | null } | { display_name: string | null }[] | null;
+}
+
+// PostgREST's foreign-key embedding (the `contacts(...)`/`profiles(...)`
+// syntax below) is resolved from real FK constraints, which a view doesn't
+// have — so this still reads the base table for the row shape + joins, and
+// gets the (admin-only) `value` from the masking view in a second, joinless
+// query, merged in afterward by id. Masking is still fully enforced in
+// Postgres (opportunities_feed's `case when is_admin()`); this split just
+// avoids depending on view-embedding support that can't be verified without
+// a live Supabase project.
+export async function fetchMaskedValueById(
+  supabase: TypedClient,
+  ids: string[]
+): Promise<Map<string, number | null>> {
+  const map = new Map<string, number | null>();
+  if (ids.length === 0) return map;
+  const { data, error } = await supabase
+    .from("opportunities_feed")
+    .select("id, value")
+    .in("id", ids);
+  if (error) throw error;
+  for (const row of data ?? []) map.set(row.id, row.value);
+  return map;
 }
 
 export async function fetchLeadsData(supabase: TypedClient): Promise<{
@@ -43,7 +65,7 @@ export async function fetchLeadsData(supabase: TypedClient): Promise<{
     supabase
       .from("opportunities")
       .select(
-        "id, contact_id, pipeline_id, stage_id, value, campaign, campaign_id, assigned_to, created_at, contacts(name, source), profiles(display_name)"
+        "id, contact_id, pipeline_id, stage_id, campaign, campaign_id, assigned_to, created_at, contacts(name, source), profiles(display_name)"
       )
       .order("created_at", { ascending: false })
       .returns<OpportunityRow[]>(),
@@ -53,6 +75,11 @@ export async function fetchLeadsData(supabase: TypedClient): Promise<{
   if (stagesError) throw stagesError;
   if (campaignsError) throw campaignsError;
   if (opportunitiesError) throw opportunitiesError;
+
+  const valueById = await fetchMaskedValueById(
+    supabase,
+    (opportunities ?? []).map((row) => row.id)
+  );
 
   return {
     pipelines: pipelines ?? [],
@@ -66,7 +93,7 @@ export async function fetchLeadsData(supabase: TypedClient): Promise<{
         contact_id: row.contact_id,
         contact_name: contact?.name ?? "—",
         source: contact?.source ?? null,
-        value: row.value,
+        value: valueById.get(row.id) ?? null,
         campaign: row.campaign,
         campaign_id: row.campaign_id,
         pipeline_id: row.pipeline_id,
@@ -113,10 +140,12 @@ export interface LightOpportunity {
 
 // No joins, no text/attribution columns — for callers that only need the
 // id/foreign-key shape, not the full kanban-card rendering: the calendar's
-// "pick an opportunity" picker and the campaigns list's per-campaign stats.
+// "pick an opportunity" picker and the campaigns list's per-campaign stats
+// (the latter sums `value`, which is exactly why this reads from the
+// masking view — no joins involved, so it's safe to read it directly).
 export async function fetchOpportunitiesLight(supabase: TypedClient): Promise<LightOpportunity[]> {
   const { data, error } = await supabase
-    .from("opportunities")
+    .from("opportunities_feed")
     .select("id, contact_id, pipeline_id, stage_id, campaign_id, value")
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -127,7 +156,6 @@ interface AnalyticsOpportunityRow {
   id: string;
   pipeline_id: string;
   stage_id: string;
-  value: number | null;
   campaign_id: string | null;
   created_at: string;
   contacts: { source: string | null } | { source: string | null }[] | null;
@@ -135,14 +163,22 @@ interface AnalyticsOpportunityRow {
 
 // Analytics' charts only ever read pipeline_id/campaign_id/stage_id/value/
 // created_at/source — never contact_name or assignment — so this skips the
-// profiles() join entirely and only pulls `source` from contacts().
+// profiles() join entirely and only pulls `source` from contacts(). `value`
+// comes from the masking view (see fetchMaskedValueById) rather than the
+// real table, same reasoning as fetchLeadsData.
 export async function fetchOpportunitiesForAnalytics(supabase: TypedClient): Promise<OpportunityCard[]> {
   const { data, error } = await supabase
     .from("opportunities")
-    .select("id, pipeline_id, stage_id, value, campaign_id, created_at, contacts(source)")
+    .select("id, pipeline_id, stage_id, campaign_id, created_at, contacts(source)")
     .order("created_at", { ascending: false })
     .returns<AnalyticsOpportunityRow[]>();
   if (error) throw error;
+
+  const valueById = await fetchMaskedValueById(
+    supabase,
+    (data ?? []).map((row) => row.id)
+  );
+
   return (data ?? []).map((row) => {
     const contact = Array.isArray(row.contacts) ? row.contacts[0] : row.contacts;
     return {
@@ -150,7 +186,7 @@ export async function fetchOpportunitiesForAnalytics(supabase: TypedClient): Pro
       contact_id: "",
       contact_name: "",
       source: contact?.source ?? null,
-      value: row.value,
+      value: valueById.get(row.id) ?? null,
       campaign: null,
       campaign_id: row.campaign_id,
       pipeline_id: row.pipeline_id,
@@ -170,6 +206,35 @@ export async function fetchContactSummary(supabase: TypedClient, contactId: stri
     .single();
   if (error) throw error;
   return data;
+}
+
+export async function renamePipeline(supabase: TypedClient, pipelineId: string, name: string) {
+  const { error } = await supabase
+    .from("pipelines")
+    .update({ name })
+    .eq("id", pipelineId)
+    .select("id")
+    .single();
+  if (error) throw error;
+}
+
+// Atomic: either reassigns every opportunity to another pipeline/stage
+// first (and only then deletes), or — with reassignTo null — just deletes,
+// letting the existing on-delete-cascade FKs remove stages/campaigns/
+// routing-rules/opportunities together. One Postgres function call is one
+// transaction, so a failure partway can never leave orphaned opportunities
+// or a half-deleted pipeline. Re-checks is_admin() itself server-side.
+export async function deletePipeline(
+  supabase: TypedClient,
+  pipelineId: string,
+  reassignTo: { pipelineId: string; stageId: string } | null
+) {
+  const { error } = await supabase.rpc("delete_pipeline", {
+    p_pipeline_id: pipelineId,
+    p_reassign_to_pipeline_id: reassignTo?.pipelineId ?? null,
+    p_reassign_to_stage_id: reassignTo?.stageId ?? null,
+  });
+  if (error) throw error;
 }
 
 export async function createPipelineWithStages(

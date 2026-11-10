@@ -15,6 +15,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { describeError } from "@/lib/errors";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import { useSyncedState } from "@/lib/hooks/use-synced-state";
 import {
   addDaysAthens,
   addMonthsAthens,
@@ -80,7 +81,7 @@ export function CalendarView({
 }) {
   const router = useRouter();
   const { currentUser, profiles } = useCurrentUser();
-  const [events, setEvents] = useState(initialEvents);
+  const [events, setEvents] = useSyncedState(initialEvents);
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [assigneeFilter, setAssigneeFilter] = useState<"all" | "me">(
@@ -195,7 +196,9 @@ export function CalendarView({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [usingMockData]);
+    // setEvents is useSyncedState's setter, reference-stable like
+    // useState's own — listed only to satisfy the linter.
+  }, [usingMockData, setEvents]);
 
   function goToday() {
     setAnchorDate(new Date());
@@ -317,6 +320,7 @@ export function CalendarView({
       });
 
       toast.success(editingId ? "Το ραντεβού ενημερώθηκε." : "Το ραντεβού δημιουργήθηκε.");
+      router.refresh();
     } catch (err) {
       reportIssue(`Η αποθήκευση του ραντεβού απέτυχε. ${describeError(err)}`);
     }
@@ -351,6 +355,7 @@ export function CalendarView({
         google_event_id: target.google_event_id,
       });
       toast.success("Το ραντεβού διαγράφηκε.");
+      router.refresh();
     } catch (err) {
       reportIssue(`Η διαγραφή απέτυχε. ${describeError(err)}`);
     } finally {

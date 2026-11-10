@@ -11,6 +11,7 @@ export async function fetchProfiles(supabase: TypedClient): Promise<Profile[]> {
   const { data, error } = await supabase
     .from("profiles")
     .select(COLUMNS)
+    .eq("is_active", true)
     .order("created_at", { ascending: true });
   if (error) throw error;
   return data ?? [];

@@ -189,6 +189,7 @@ export interface Database {
           email: string | null;
           role: UserRole;
           color: string | null;
+          is_active: boolean;
           created_at: string;
         };
         Insert: {
@@ -198,6 +199,7 @@ export interface Database {
           email?: string | null;
           role?: UserRole;
           color?: string | null;
+          is_active?: boolean;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
@@ -390,7 +392,14 @@ export interface Database {
         ];
       };
     };
-    Views: Record<string, never>;
+    Views: {
+      // security_invoker view over opportunities that masks `value` to
+      // null for non-admins — see 0011_finance_visibility_and_pipeline_mgmt.sql.
+      opportunities_feed: {
+        Row: Database["public"]["Tables"]["opportunities"]["Row"];
+        Relationships: Database["public"]["Tables"]["opportunities"]["Relationships"];
+      };
+    };
     Functions: {
       create_campaign_and_activate: {
         Args: { p_pipeline_id: string; p_name: string };
@@ -403,6 +412,14 @@ export interface Database {
       is_admin: {
         Args: Record<string, never>;
         Returns: boolean;
+      };
+      delete_pipeline: {
+        Args: {
+          p_pipeline_id: string;
+          p_reassign_to_pipeline_id?: string | null;
+          p_reassign_to_stage_id?: string | null;
+        };
+        Returns: undefined;
       };
     };
     Enums: {

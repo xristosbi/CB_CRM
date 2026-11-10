@@ -1,4 +1,8 @@
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+
 import { createClient } from "@/lib/supabase/server";
+import { USER_ID_HEADER } from "@/lib/supabase/middleware";
 import type { User } from "@supabase/supabase-js";
 
 export type RequireAdminResult =
@@ -28,4 +32,37 @@ export async function requireCallerAdmin(): Promise<RequireAdminResult> {
   }
 
   return { ok: true, user };
+}
+
+// Server Component guard for admin-only PAGES (Πληρωμές, Analytics) — a
+// hard redirect beyond the sidebar already hiding the link and RLS already
+// blocking the underlying tables, so visiting the URL directly doesn't even
+// render a confusing "empty" page. Reuses the identity the proxy already
+// forwarded via headers (see (dashboard)/layout.tsx) instead of calling
+// auth.getUser() again, so it doesn't reintroduce the extra auth round
+// trip per navigation that was removed from the rest of the dashboard.
+export async function requireAdminPage(): Promise<void> {
+  const supabase = await createClient();
+  const requestHeaders = await headers();
+  let userId = requestHeaders.get(USER_ID_HEADER) ?? "";
+
+  if (!userId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      redirect("/login");
+    }
+    userId = user.id;
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (!profile || profile.role !== "admin") {
+    redirect("/leads");
+  }
 }

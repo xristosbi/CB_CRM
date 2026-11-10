@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ActivityType, Database } from "@/lib/database.types";
+import { fetchMaskedValueById } from "@/lib/queries/leads";
 import type { ActivityEntry, CalendarTaskEntry, Contact, ContactOpportunity, FollowUpTask } from "@/lib/types";
 
 type TypedClient = SupabaseClient<Database>;
@@ -9,7 +10,6 @@ interface OpportunityWithRelationsRow {
   id: string;
   pipeline_id: string;
   stage_id: string;
-  value: number | null;
   campaign: string | null;
   assigned_to: string | null;
   pipelines: { name: string } | { name: string }[] | null;
@@ -72,7 +72,7 @@ export async function fetchContactDetail(
       supabase
         .from("opportunities")
         .select(
-          "id, pipeline_id, stage_id, value, campaign, assigned_to, pipelines(name), pipeline_stages(name), campaigns(name), profiles(display_name)"
+          "id, pipeline_id, stage_id, campaign, assigned_to, pipelines(name), pipeline_stages(name), campaigns(name), profiles(display_name)"
         )
         .eq("contact_id", contactId)
         .order("created_at", { ascending: false })
@@ -94,6 +94,11 @@ export async function fetchContactDetail(
   if (activityError) throw activityError;
   if (tasksError) throw tasksError;
 
+  const valueById = await fetchMaskedValueById(
+    supabase,
+    (opportunities ?? []).map((row) => row.id)
+  );
+
   return {
     contact,
     opportunities: (opportunities ?? []).map((row) => {
@@ -107,7 +112,7 @@ export async function fetchContactDetail(
         pipeline_name: pipeline?.name ?? "—",
         stage_id: row.stage_id,
         stage_name: stage?.name ?? "—",
-        value: row.value,
+        value: valueById.get(row.id) ?? null,
         campaign: row.campaign,
         campaign_entity_name: campaignEntity?.name ?? null,
         assigned_to: row.assigned_to,

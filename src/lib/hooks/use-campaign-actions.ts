@@ -1,6 +1,7 @@
 "use client";
 
 import { type Dispatch, type SetStateAction } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { describeError } from "@/lib/errors";
@@ -27,6 +28,8 @@ export function useCampaignActions({
   usingMockData: boolean;
   reportIssue: (message: string, tone?: "error" | "warning") => void;
 }) {
+  const router = useRouter();
+
   async function createCampaign(pipelineId: string, name: string): Promise<Campaign | null> {
     if (usingMockData) {
       const newCampaign: Campaign = {
@@ -50,6 +53,7 @@ export function useCampaignActions({
         prev.map((c) => (c.pipeline_id === pipelineId ? { ...c, is_active: false } : c)).concat(created)
       );
       toast.success("Το campaign δημιουργήθηκε.");
+      router.refresh();
       return created;
     } catch (err) {
       reportIssue(`Η δημιουργία campaign απέτυχε, τίποτα δεν άλλαξε. ${describeError(err)}`);
@@ -83,6 +87,7 @@ export function useCampaignActions({
         })
       );
       toast.success("Το campaign ενεργοποιήθηκε.");
+      router.refresh();
       return true;
     } catch (err) {
       reportIssue(`Η ενεργοποίηση campaign απέτυχε, τίποτα δεν άλλαξε. ${describeError(err)}`);
@@ -99,6 +104,7 @@ export function useCampaignActions({
     try {
       const supabase = createClient();
       await renameCampaign(supabase, campaignId, name);
+      router.refresh();
       return true;
     } catch (err) {
       if (previous !== undefined) {
@@ -126,6 +132,7 @@ export function useCampaignActions({
       await deleteCampaignIfEmpty(supabase, campaignId);
       setCampaigns((prev) => prev.filter((c) => c.id !== campaignId));
       toast.success("Το campaign διαγράφηκε.");
+      router.refresh();
       return true;
     } catch (err) {
       reportIssue(`Η διαγραφή campaign απέτυχε. ${describeError(err)}`);

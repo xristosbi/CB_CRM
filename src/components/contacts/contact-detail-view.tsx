@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UserLabel } from "@/components/users/user-label";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import { useSyncedState } from "@/lib/hooks/use-synced-state";
 import {
   addNote,
   addTask,
@@ -72,10 +73,13 @@ export function ContactDetailView({
 }) {
   const router = useRouter();
   const { currentUser, profiles } = useCurrentUser();
-  const [contact, setContact] = useState(initialContact);
-  const [activity, setActivity] = useState(initialActivity);
-  const [opportunities, setOpportunities] = useState(initialOpportunities);
-  const [tasks, setTasks] = useState(initialTasks);
+  // router.refresh() passes fresh initial* props down after a mutation —
+  // useSyncedState (see leads-board.tsx for the longer comment) is what
+  // actually makes that visible instead of silently doing nothing.
+  const [contact, setContact] = useSyncedState(initialContact);
+  const [activity, setActivity] = useSyncedState(initialActivity);
+  const [opportunities, setOpportunities] = useSyncedState(initialOpportunities);
+  const [tasks, setTasks] = useSyncedState(initialTasks);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteContactOpen, setDeleteContactOpen] = useState(false);
   const [assignBanner, setAssignBanner] = useState<string | null>(null);
@@ -106,6 +110,7 @@ export function ContactDetailView({
     try {
       const supabase = createClient();
       await updateOpportunityAssignment(supabase, opportunityId, userId);
+      router.refresh();
     } catch (err) {
       if (previous) {
         setOpportunities((prev) => prev.map((o) => (o.id === opportunityId ? previous : o)));
@@ -141,6 +146,7 @@ export function ContactDetailView({
         ...prev,
       ]);
       toast.success("Τα στοιχεία ενημερώθηκαν.");
+      router.refresh();
     } catch {
       toast.error("Η ενημέρωση απέτυχε.");
     }
@@ -169,6 +175,7 @@ export function ContactDetailView({
       const created = await addNote(supabase, contact.id, content, currentUser.id);
       setActivity((prev) => [created, ...prev]);
       toast.success("Η σημείωση αποθηκεύτηκε.");
+      router.refresh();
     } catch {
       toast.error("Η αποθήκευση απέτυχε.");
     }
@@ -195,6 +202,7 @@ export function ContactDetailView({
       const created = await addTask(supabase, contact.id, title, dueAt);
       setTasks((prev) => [created, ...prev]);
       toast.success("Το task αποθηκεύτηκε.");
+      router.refresh();
     } catch {
       toast.error("Η αποθήκευση απέτυχε.");
     }
@@ -209,6 +217,7 @@ export function ContactDetailView({
     try {
       const supabase = createClient();
       await setTaskDone(supabase, taskId, done);
+      router.refresh();
     } catch {
       setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, done: previous } : t)));
       toast.error("Η ενημέρωση απέτυχε.");
@@ -232,6 +241,7 @@ export function ContactDetailView({
       const supabase = createClient();
       await updateActivityContent(supabase, id, content);
       toast.success("Ενημερώθηκε.");
+      router.refresh();
     } catch {
       setActivity((prev) => prev.map((a) => (a.id === id ? { ...a, content: previous } : a)));
       toast.error("Η ενημέρωση απέτυχε.");
@@ -251,6 +261,7 @@ export function ContactDetailView({
       const supabase = createClient();
       await deleteActivityEntry(supabase, id);
       toast.success("Διαγράφηκε.");
+      router.refresh();
     } catch {
       setActivity(previous);
       toast.error("Η διαγραφή απέτυχε.");
@@ -439,12 +450,14 @@ export function ContactDetailView({
             onEdit={handleEditActivityEntry}
             onDelete={handleDeleteActivityEntry}
           />
-          <ContactPaymentsSection
-            contactId={contact.id}
-            contactName={contact.name}
-            initialPayments={initialPayments}
-            usingMockData={usingMockData}
-          />
+          {currentUser.role === "admin" && (
+            <ContactPaymentsSection
+              contactId={contact.id}
+              contactName={contact.name}
+              initialPayments={initialPayments}
+              usingMockData={usingMockData}
+            />
+          )}
         </div>
       </div>
 

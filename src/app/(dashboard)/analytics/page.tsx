@@ -1,4 +1,5 @@
 import { AnalyticsView } from "@/components/analytics/analytics-view";
+import { requireAdminPage } from "@/lib/auth/require-admin";
 import {
   MOCK_CAMPAIGNS,
   MOCK_EXPENSES,
@@ -16,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export default async function AnalyticsPage() {
   const usingMockData = !hasSupabaseEnv();
+  if (!usingMockData) await requireAdminPage();
 
   const { pipelines, stages, campaigns, opportunities, payments, expenses } = usingMockData
     ? {

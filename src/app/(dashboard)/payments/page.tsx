@@ -1,4 +1,5 @@
 import { FinanceView } from "@/components/payments/finance-view";
+import { requireAdminPage } from "@/lib/auth/require-admin";
 import { MOCK_CONTACTS, MOCK_EXPENSES, MOCK_PAYMENTS } from "@/lib/mock-data";
 import { fetchContacts } from "@/lib/queries/contacts";
 import { fetchExpenses } from "@/lib/queries/expenses";
@@ -8,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export default async function PaymentsPage() {
   const usingMockData = !hasSupabaseEnv();
+  if (!usingMockData) await requireAdminPage();
 
   const { payments, expenses, contacts } = usingMockData
     ? { payments: MOCK_PAYMENTS, expenses: MOCK_EXPENSES, contacts: MOCK_CONTACTS }

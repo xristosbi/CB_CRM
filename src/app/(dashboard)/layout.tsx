@@ -11,6 +11,13 @@ import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { USER_EMAIL_HEADER, USER_ID_HEADER } from "@/lib/supabase/middleware";
 import type { Profile } from "@/lib/types";
 
+// Explicit, not just implied by cookies()/headers() usage: every page under
+// the dashboard reads live per-user data (leads, assignments, finance
+// visibility) and must never be served from a cached render — this also
+// stops the client Router Cache from treating any of them as eligible for
+// Link's full-page prefetch caching.
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({
   children,
 }: {

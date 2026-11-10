@@ -19,6 +19,7 @@ import { updateProfile } from "@/lib/queries/profiles";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/types";
 import { AddUserDialog } from "./add-user-dialog";
+import { DeleteMemberDialog } from "./delete-member-dialog";
 import { EditUserDialog } from "./edit-user-dialog";
 
 const dateFormatter = new Intl.DateTimeFormat("el-GR", {
@@ -37,6 +38,7 @@ export function TeamSettings({
   const { currentUser, setProfiles: setContextProfiles, updateCurrentUser } = useCurrentUser();
   const [profiles, setProfiles] = useState(initialProfiles);
   const [editTarget, setEditTarget] = useState<Profile | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
 
   const isAdmin = currentUser.role === "admin";
   const visibleProfiles = isAdmin ? profiles : profiles.filter((p) => p.id === currentUser.id);
@@ -82,6 +84,46 @@ export function TeamSettings({
     }
   }
 
+  async function handleDeleteConfirm(reassignTo: string | null) {
+    if (!deleteTarget) return;
+    const targetId = deleteTarget.id;
+
+    if (usingMockData) {
+      setProfiles((prev) => prev.filter((p) => p.id !== targetId));
+      setContextProfiles((prev) => prev.filter((p) => p.id !== targetId));
+      setDeleteTarget(null);
+      toast.success("Το μέλος διαγράφηκε (demo δεδομένα).");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/users/${targetId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reassignTo }),
+      });
+      const data = (await res.json()) as {
+        success: boolean;
+        mode?: "deleted" | "deactivated";
+        reason?: string;
+      };
+      if (!data.success) throw new Error(data.reason ?? "αποτυχία διαγραφής μέλους");
+
+      setProfiles((prev) => prev.filter((p) => p.id !== targetId));
+      setContextProfiles((prev) => prev.filter((p) => p.id !== targetId));
+
+      toast.success(
+        data.mode === "deactivated"
+          ? "Δεν ήταν δυνατή η πλήρης διαγραφή, οπότε ο λογαριασμός απενεργοποιήθηκε (μπλοκαρισμένη σύνδεση, κρυφός από τις λίστες)."
+          : "Το μέλος διαγράφηκε."
+      );
+    } catch (err) {
+      toast.error(`Η διαγραφή απέτυχε. ${describeError(err)}`, { duration: Infinity });
+    } finally {
+      setDeleteTarget(null);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
@@ -115,11 +157,23 @@ export function TeamSettings({
                   {dateFormatter.format(new Date(p.created_at))}
                 </TableCell>
                 <TableCell className="text-right">
-                  {(isAdmin || p.id === currentUser.id) && (
-                    <Button variant="ghost" size="sm" onClick={() => setEditTarget(p)}>
-                      Επεξεργασία
-                    </Button>
-                  )}
+                  <div className="flex items-center justify-end gap-1">
+                    {(isAdmin || p.id === currentUser.id) && (
+                      <Button variant="ghost" size="sm" onClick={() => setEditTarget(p)}>
+                        Επεξεργασία
+                      </Button>
+                    )}
+                    {isAdmin && p.id !== currentUser.id && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(p)}
+                      >
+                        Διαγραφή
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -141,6 +195,15 @@ export function TeamSettings({
           if (!open) setEditTarget(null);
         }}
         onSave={handleSave}
+      />
+
+      <DeleteMemberDialog
+        target={deleteTarget}
+        otherMembers={profiles.filter((p) => p.id !== deleteTarget?.id && p.id !== currentUser.id)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        onConfirm={handleDeleteConfirm}
       />
     </div>
   );

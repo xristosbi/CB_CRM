@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import type { OpportunityCard } from "@/lib/types";
 
 export function EditOpportunityDialog({
@@ -42,14 +43,20 @@ function EditOpportunityForm({
   onSave: (values: { value: number | null; campaign: string | null }) => Promise<void> | void;
   onClose: () => void;
 }) {
+  const { currentUser } = useCurrentUser();
+  const canViewFinance = currentUser.role === "admin";
   const [value, setValue] = useState(target.value != null ? String(target.value) : "");
   const [campaign, setCampaign] = useState(target.campaign ?? "");
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const parsedValue = value.trim() ? Number(value) : null;
-    if (value.trim() && !Number.isFinite(parsedValue)) return;
+    // Not admin: never send a `value` change at all — the field isn't even
+    // rendered below, so `value` state here is always target.value
+    // untouched. (The DB trigger would also silently discard it either
+    // way, but there's no reason to even attempt it.)
+    const parsedValue = canViewFinance ? (value.trim() ? Number(value) : null) : target.value;
+    if (canViewFinance && value.trim() && !Number.isFinite(parsedValue)) return;
 
     setSubmitting(true);
     try {
@@ -68,17 +75,19 @@ function EditOpportunityForm({
       </DialogHeader>
 
       <div className="mt-4 flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="opp-value">Αξία (€)</Label>
-          <Input
-            id="opp-value"
-            type="number"
-            min="0"
-            step="0.01"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-          />
-        </div>
+        {canViewFinance && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="opp-value">Αξία (€)</Label>
+            <Input
+              id="opp-value"
+              type="number"
+              min="0"
+              step="0.01"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </div>
+        )}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="opp-campaign">Καμπάνια</Label>
           <Input id="opp-campaign" value={campaign} onChange={(e) => setCampaign(e.target.value)} />

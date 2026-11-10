@@ -11,7 +11,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, horizontalListSortingStrategy, SortableContext } from "@dnd-kit/sortable";
-import { CalendarRange, X } from "lucide-react";
+import { CalendarRange, MoreVertical, Pencil, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import { DateRangeFilter } from "@/components/payments/date-range-filter";
 import { describeError } from "@/lib/errors";
 import { useCampaignActions } from "@/lib/hooks/use-campaign-actions";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import { useSyncedState } from "@/lib/hooks/use-synced-state";
 import { createLead } from "@/lib/queries/contacts";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -36,9 +37,11 @@ import {
   addStage,
   createPipelineWithStages,
   deleteOpportunity,
+  deletePipeline,
   deleteStage,
   fetchContactSummary,
   insertActivity,
+  renamePipeline,
   renameStage,
   reorderStages,
   updateOpportunity,
@@ -49,15 +52,23 @@ import {
 import { computeDateRange, isWithinRange, type DateRangePreset } from "@/lib/date-range";
 import type { Campaign, OpportunityCard, Pipeline, Stage } from "@/lib/types";
 import type { ActivityType } from "@/lib/database.types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AddStageColumn } from "./add-stage-column";
 import { ALL_CAMPAIGNS_VALUE, CampaignDropdown } from "./campaign-dropdown";
 import { DeleteOpportunityDialog } from "./delete-opportunity-dialog";
+import { DeletePipelineDialog } from "./delete-pipeline-dialog";
 import { DeleteStageDialog } from "./delete-stage-dialog";
 import { EditOpportunityDialog } from "./edit-opportunity-dialog";
 import { KanbanColumn } from "./kanban-column";
 import { NewCampaignDialog } from "./new-campaign-dialog";
 import { NewPipelineDialog } from "./new-pipeline-dialog";
 import { QuickActivityDialog } from "./quick-activity-dialog";
+import { RenamePipelineDialog } from "./rename-pipeline-dialog";
 
 const ASSIGNEE_ALL = "all";
 const ASSIGNEE_ME = "me";
@@ -168,10 +179,15 @@ function LeadsBoardInner({
   const searchParams = useSearchParams();
   const { currentUser, profiles } = useCurrentUser();
 
-  const [pipelines, setPipelines] = useState(initialPipelines);
-  const [stages, setStages] = useState(initialStages);
-  const [campaigns, setCampaigns] = useState(initialCampaigns);
-  const [opportunities, setOpportunities] = useState(initialOpportunities);
+  // router.refresh() re-runs the Server Component and passes fresh
+  // initial* props down — useSyncedState re-applies that (during render,
+  // not an effect) whenever it changes, since each mutation handler
+  // already applies its own optimistic update first, so by the time a
+  // refresh's fresh props land, they should agree with the local state.
+  const [pipelines, setPipelines] = useSyncedState(initialPipelines);
+  const [stages, setStages] = useSyncedState(initialStages);
+  const [campaigns, setCampaigns] = useSyncedState(initialCampaigns);
+  const [opportunities, setOpportunities] = useSyncedState(initialOpportunities);
 
   const storedPipelineId = useSyncExternalStore(
     subscribeToStorage,
@@ -302,6 +318,8 @@ function LeadsBoardInner({
   );
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
+  const [renamePipelineTarget, setRenamePipelineTarget] = useState<Pipeline | null>(null);
+  const [deletePipelineTarget, setDeletePipelineTarget] = useState<Pipeline | null>(null);
   const [activeDragType, setActiveDragType] = useState<"card" | "column" | null>(null);
   const [dragBanner, setDragBanner] = useState<{ tone: "error" | "warning"; message: string } | null>(
     null
@@ -498,7 +516,10 @@ function LeadsBoardInner({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [usingMockData]);
+    // setOpportunities is useSyncedState's setter, which — like useState's —
+    // is reference-stable across renders; listing it here just satisfies
+    // the linter, it doesn't change when this effect re-runs.
+  }, [usingMockData, setOpportunities]);
 
   function handleDragStart(event: DragStartEvent) {
     const type = event.active.data.current?.type;
@@ -542,6 +563,11 @@ function LeadsBoardInner({
     // DB — misleading the user into thinking the move itself failed.
     try {
       await updateOpportunityStage(supabase, opportunityId, newStageId);
+      // Invalidates this route's entry in the client Router Cache so that
+      // navigating away and back (without a hard refresh) always shows the
+      // stage the card actually landed on, not whatever was cached before
+      // the move.
+      router.refresh();
     } catch (err) {
       setOpportunities((prev) =>
         prev.map((o) => (o.id === opportunityId ? { ...o, stage_id: previousStageId } : o))
@@ -592,6 +618,7 @@ function LeadsBoardInner({
     try {
       const supabase = createClient();
       await reorderStages(supabase, updates);
+      router.refresh();
     } catch (err) {
       setStages(previousStages);
       reportIssue(`Η αλλαγή σειράς στηλών απέτυχε, δοκίμασε ξανά. ${describeError(err)}`);
@@ -639,8 +666,87 @@ function LeadsBoardInner({
       ]);
       navigateTo(pipeline.id, campaign.id);
       toast.success("Το pipeline δημιουργήθηκε.");
+      router.refresh();
     } catch {
       toast.error("Δεν ήταν δυνατή η δημιουργία του pipeline.");
+    }
+  }
+
+  async function handleRenamePipelineSave(name: string) {
+    if (!renamePipelineTarget) return;
+    const targetId = renamePipelineTarget.id;
+    const previous = pipelines.find((p) => p.id === targetId)?.name;
+    setPipelines((prev) => prev.map((p) => (p.id === targetId ? { ...p, name } : p)));
+
+    if (usingMockData) {
+      toast.success("Το pipeline μετονομάστηκε (demo δεδομένα).");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      await renamePipeline(supabase, targetId, name);
+      toast.success("Το pipeline μετονομάστηκε.");
+      router.refresh();
+    } catch (err) {
+      if (previous !== undefined) {
+        setPipelines((prev) => prev.map((p) => (p.id === targetId ? { ...p, name: previous } : p)));
+      }
+      toast.error(`Η μετονομασία απέτυχε. ${describeError(err)}`);
+    }
+  }
+
+  // Applies the reassignment/removal to local state — shared by the mock
+  // and real branches so the two can never drift on what "delete a
+  // pipeline" actually does to the board.
+  function applyPipelineDeletion(
+    targetId: string,
+    reassignTo: { pipelineId: string; stageId: string } | null
+  ) {
+    if (reassignTo) {
+      setOpportunities((prev) =>
+        prev.map((o) =>
+          o.pipeline_id === targetId
+            ? { ...o, pipeline_id: reassignTo.pipelineId, stage_id: reassignTo.stageId, campaign_id: null, campaign: null }
+            : o
+        )
+      );
+    } else {
+      setOpportunities((prev) => prev.filter((o) => o.pipeline_id !== targetId));
+    }
+    setStages((prev) => prev.filter((s) => s.pipeline_id !== targetId));
+    setCampaigns((prev) => prev.filter((c) => c.pipeline_id !== targetId));
+    setPipelines((prev) => prev.filter((p) => p.id !== targetId));
+
+    if (selectedPipelineId === targetId) {
+      const next = pipelines.find((p) => p.id !== targetId);
+      if (next) setSelectedPipelineId(next.id);
+    }
+  }
+
+  async function handleDeletePipelineConfirm(
+    reassignTo: { pipelineId: string; stageId: string } | null
+  ) {
+    if (!deletePipelineTarget) return;
+    const targetId = deletePipelineTarget.id;
+
+    if (usingMockData) {
+      applyPipelineDeletion(targetId, reassignTo);
+      setDeletePipelineTarget(null);
+      toast.success("Το pipeline διαγράφηκε (demo δεδομένα).");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      await deletePipeline(supabase, targetId, reassignTo);
+      applyPipelineDeletion(targetId, reassignTo);
+      toast.success("Το pipeline διαγράφηκε.");
+      router.refresh();
+    } catch (err) {
+      toast.error(`Η διαγραφή απέτυχε. ${describeError(err)}`);
+    } finally {
+      setDeletePipelineTarget(null);
     }
   }
 
@@ -725,6 +831,7 @@ function LeadsBoardInner({
         ]);
       }
       toast.success("Το lead δημιουργήθηκε.");
+      router.refresh();
     } catch {
       toast.error("Δεν ήταν δυνατή η δημιουργία του lead.");
     }
@@ -739,6 +846,7 @@ function LeadsBoardInner({
     try {
       const supabase = createClient();
       await renameStage(supabase, stageId, name);
+      router.refresh();
     } catch {
       if (previous !== undefined) {
         setStages((prev) => prev.map((s) => (s.id === stageId ? { ...s, name: previous } : s)));
@@ -771,6 +879,7 @@ function LeadsBoardInner({
       const supabase = createClient();
       const created = await addStage(supabase, selectedPipelineId, name, position);
       setStages((prev) => [...prev, created]);
+      router.refresh();
     } catch {
       toast.error("Δεν ήταν δυνατή η προσθήκη σταδίου.");
     }
@@ -814,6 +923,20 @@ function LeadsBoardInner({
       })()
     : null;
 
+  const deletePipelineOpportunityCount = deletePipelineTarget
+    ? opportunities.filter((o) => o.pipeline_id === deletePipelineTarget.id).length
+    : 0;
+  const deletePipelineStageCount = deletePipelineTarget
+    ? stages.filter((s) => s.pipeline_id === deletePipelineTarget.id).length
+    : 0;
+  const deletePipelineCampaignCount = deletePipelineTarget
+    ? campaigns.filter((c) => c.pipeline_id === deletePipelineTarget.id).length
+    : 0;
+  const otherPipelinesForDelete = deletePipelineTarget
+    ? pipelines.filter((p) => p.id !== deletePipelineTarget.id)
+    : [];
+  const isLastPipeline = pipelines.length <= 1;
+
   async function handleConfirmDeleteStage() {
     if (!deleteTarget) return;
     const canDelete = deleteTargetNeighbor !== null || deleteTargetOpportunityCount === 0;
@@ -844,6 +967,7 @@ function LeadsBoardInner({
       }
       setStages((prev) => prev.filter((s) => s.id !== deleteTarget.id));
       toast.success("Το στάδιο διαγράφηκε.");
+      router.refresh();
     } catch {
       toast.error("Η διαγραφή απέτυχε.");
     } finally {
@@ -886,6 +1010,7 @@ function LeadsBoardInner({
         return next;
       });
       toast.success("Καταχωρήθηκε.");
+      router.refresh();
     } catch {
       toast.error("Η καταχώρηση απέτυχε.");
     } finally {
@@ -931,6 +1056,7 @@ function LeadsBoardInner({
       reportIssue(`Η ανάθεση απέτυχε, παρέμεινε όπως ήταν. ${describeError(err)}`);
       return;
     }
+    router.refresh();
 
     try {
       const content = userId
@@ -964,6 +1090,7 @@ function LeadsBoardInner({
     try {
       const supabase = createClient();
       await updateOpportunity(supabase, targetId, values);
+      router.refresh();
     } catch {
       toast.error("Η ενημέρωση απέτυχε.");
     }
@@ -987,6 +1114,7 @@ function LeadsBoardInner({
       const stageName = stages.find((s) => s.id === target.stage_id)?.name ?? "";
       await deleteOpportunity(supabase, target, pipelineName, stageName, currentUser.id);
       toast.success("Το lead διαγράφηκε.");
+      router.refresh();
     } catch {
       setOpportunities((prev) => [target, ...prev]);
       toast.error("Η διαγραφή απέτυχε.");
@@ -1000,15 +1128,49 @@ function LeadsBoardInner({
       {!lockedCampaignId && (
         <div className="flex flex-col gap-3 border-b p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <Tabs value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
-              <TabsList>
-                {pipelines.map((pipeline) => (
-                  <TabsTrigger key={pipeline.id} value={pipeline.id}>
-                    {pipeline.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+            <div className="flex items-center gap-1">
+              <Tabs value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
+                <TabsList>
+                  {pipelines.map((pipeline) => (
+                    <TabsTrigger key={pipeline.id} value={pipeline.id}>
+                      {pipeline.name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+              {currentUser.role === "admin" && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="ghost" className="size-8" aria-label="Επιλογές pipeline">
+                      <MoreVertical className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        setRenamePipelineTarget(
+                          pipelines.find((p) => p.id === selectedPipelineId) ?? null
+                        )
+                      }
+                    >
+                      <Pencil className="size-4" />
+                      Μετονομασία
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() =>
+                        setDeletePipelineTarget(
+                          pipelines.find((p) => p.id === selectedPipelineId) ?? null
+                        )
+                      }
+                    >
+                      <Trash2 className="size-4" />
+                      Διαγραφή
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <Button size="sm" onClick={() => setNewLeadOpen(true)}>
                 Νέο lead
@@ -1170,6 +1332,28 @@ function LeadsBoardInner({
           if (!open) setDeleteTarget(null);
         }}
         onConfirm={handleConfirmDeleteStage}
+      />
+
+      <RenamePipelineDialog
+        target={renamePipelineTarget}
+        onOpenChange={(open) => {
+          if (!open) setRenamePipelineTarget(null);
+        }}
+        onSave={handleRenamePipelineSave}
+      />
+
+      <DeletePipelineDialog
+        target={deletePipelineTarget}
+        opportunityCount={deletePipelineOpportunityCount}
+        stageCount={deletePipelineStageCount}
+        campaignCount={deletePipelineCampaignCount}
+        otherPipelines={otherPipelinesForDelete}
+        stages={stages}
+        isLastPipeline={isLastPipeline}
+        onOpenChange={(open) => {
+          if (!open) setDeletePipelineTarget(null);
+        }}
+        onConfirm={handleDeletePipelineConfirm}
       />
 
       <QuickActivityDialog

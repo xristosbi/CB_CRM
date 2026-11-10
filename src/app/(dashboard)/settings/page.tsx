@@ -17,7 +17,8 @@ export default async function SettingsPage() {
       </div>
 
       <p className="mt-6 text-sm text-muted-foreground">
-        Διαχείριση pipelines &amp; stages έρχεται σε επόμενο βήμα.
+        Η μετονομασία και διαγραφή pipelines γίνεται από το μενού ⋮ δίπλα στις καρτέλες pipeline,
+        στη σελίδα Leads.
       </p>
     </div>
   );

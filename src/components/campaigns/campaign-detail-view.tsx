@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LeadsBoard } from "@/components/leads/leads-board";
 import { computeCampaignStatsMap, getCampaignStats } from "@/lib/campaign-stats";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import type { Campaign, OpportunityCard, Pipeline, Stage } from "@/lib/types";
 
 const dateFormatter = new Intl.DateTimeFormat("el-GR", {
@@ -41,6 +42,8 @@ export function CampaignDetailView({
   initialNextAppointmentByContact?: Record<string, string>;
   usingMockData: boolean;
 }) {
+  const { currentUser } = useCurrentUser();
+  const canViewFinance = currentUser.role === "admin";
   const stats = useMemo(
     () => getCampaignStats(computeCampaignStatsMap(initialOpportunities, initialStages), campaign.id),
     [initialOpportunities, initialStages, campaign.id]
@@ -90,10 +93,12 @@ export function CampaignDetailView({
               <p className="text-lg font-semibold">{stats.wonCount}</p>
               <p className="text-xs text-muted-foreground">Won</p>
             </div>
-            <div className="text-center">
-              <p className="text-lg font-semibold">{currency.format(stats.wonAmount)}</p>
-              <p className="text-xs text-muted-foreground">Ποσό (won)</p>
-            </div>
+            {canViewFinance && (
+              <div className="text-center">
+                <p className="text-lg font-semibold">{currency.format(stats.wonAmount)}</p>
+                <p className="text-xs text-muted-foreground">Ποσό (won)</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -50,7 +50,6 @@ export function SidebarNav({
               key={item.href}
               href={item.href}
               onClick={onNavigate}
-              prefetch
               className={cn(
                 "flex items-center gap-3 rounded-r-md border-l-2 px-3 py-2 text-sm font-medium transition-colors",
                 active

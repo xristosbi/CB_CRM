@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,6 +12,7 @@ import { EventRow } from "@/components/calendar/event-pieces";
 import { buildAppointmentLogContent } from "@/lib/calendar-event-types";
 import { describeError } from "@/lib/errors";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import { useSyncedState } from "@/lib/hooks/use-synced-state";
 import { notifyCalendarWebhook } from "@/lib/calendar-webhook-client";
 import {
   createCalendarEvent,
@@ -36,8 +38,9 @@ export function AppointmentsSection({
   usingMockData: boolean;
   onActivityLogged: (entry: ActivityEntry) => void;
 }) {
+  const router = useRouter();
   const { currentUser, profiles } = useCurrentUser();
-  const [events, setEvents] = useState(initialEvents);
+  const [events, setEvents] = useSyncedState(initialEvents);
   const [dialogState, setDialogState] = useState<
     { mode: "create"; defaultStart: Date } | { mode: "edit"; event: CalendarEvent } | null
   >(null);
@@ -171,6 +174,7 @@ export function AppointmentsSection({
       });
 
       toast.success(editingId ? "Το ραντεβού ενημερώθηκε." : "Το ραντεβού δημιουργήθηκε.");
+      router.refresh();
     } catch (err) {
       reportIssue(`Η αποθήκευση του ραντεβού απέτυχε. ${describeError(err)}`);
     }
@@ -205,6 +209,7 @@ export function AppointmentsSection({
         google_event_id: target.google_event_id,
       });
       toast.success("Το ραντεβού διαγράφηκε.");
+      router.refresh();
     } catch (err) {
       reportIssue(`Η διαγραφή απέτυχε. ${describeError(err)}`);
     } finally {

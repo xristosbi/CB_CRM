@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/table";
 import { computeCampaignStatsMap, getCampaignStats, type CampaignStatsOpportunity } from "@/lib/campaign-stats";
 import { useCampaignActions } from "@/lib/hooks/use-campaign-actions";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import { cn } from "@/lib/utils";
 import type { Campaign, Pipeline, Stage } from "@/lib/types";
 
@@ -63,6 +64,8 @@ export function CampaignsListView({
   opportunities: CampaignListOpportunity[];
   usingMockData: boolean;
 }) {
+  const { currentUser } = useCurrentUser();
+  const canViewFinance = currentUser.role === "admin";
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const [search, setSearch] = useState("");
   const [pipelineFilter, setPipelineFilter] = useState("all");
@@ -200,7 +203,9 @@ export function CampaignsListView({
               <TableHead className="hidden md:table-cell">Δημιουργήθηκε</TableHead>
               <TableHead className="text-right">Leads</TableHead>
               <TableHead className="hidden text-right lg:table-cell">Won</TableHead>
-              <TableHead className="hidden text-right lg:table-cell">Ποσό (won)</TableHead>
+              {canViewFinance && (
+                <TableHead className="hidden text-right lg:table-cell">Ποσό (won)</TableHead>
+              )}
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
@@ -262,9 +267,11 @@ export function CampaignsListView({
                   <TableCell className="hidden text-right lg:table-cell">
                     {stats.wonCount}
                   </TableCell>
-                  <TableCell className="hidden text-right lg:table-cell">
-                    {currency.format(stats.wonAmount)}
-                  </TableCell>
+                  {canViewFinance && (
+                    <TableCell className="hidden text-right lg:table-cell">
+                      {currency.format(stats.wonAmount)}
+                    </TableCell>
+                  )}
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
