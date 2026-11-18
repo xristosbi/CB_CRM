@@ -1124,7 +1124,7 @@ function LeadsBoardInner({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {!lockedCampaignId && (
         <div className="flex flex-col gap-3 border-b p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1281,7 +1281,7 @@ function LeadsBoardInner({
         </div>
       )}
 
-      <div className="flex-1 overflow-x-auto p-4">
+      <div className="kanban-scroll-x min-h-0 flex-1 overflow-x-auto p-4">
         <DndContext
           id="leads-board-dnd"
           sensors={sensors}

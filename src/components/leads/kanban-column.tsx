@@ -115,11 +115,11 @@ export function KanbanColumn({
         transition: columnTransition,
       }}
       className={cn(
-        "flex w-72 shrink-0 flex-col rounded-lg bg-muted/40",
+        "flex h-full w-72 shrink-0 flex-col rounded-lg bg-muted/40",
         isColumnDragging && "opacity-50"
       )}
     >
-      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
+      <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-3 pb-2">
         <div className="flex min-w-0 flex-1 items-center gap-1">
           <button
             type="button"
@@ -192,13 +192,13 @@ export function KanbanColumn({
         </div>
       </div>
       {total > 0 && (
-        <p className="px-3 pb-2 text-xs text-muted-foreground">{currency.format(total)}</p>
+        <p className="shrink-0 px-3 pb-2 text-xs text-muted-foreground">{currency.format(total)}</p>
       )}
 
       <div
         ref={setCardZoneRef}
         className={cn(
-          "flex min-h-24 flex-1 flex-col gap-2 px-2 pb-3 transition-colors",
+          "flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-3 transition-colors",
           isOver && "bg-accent/60"
         )}
       >

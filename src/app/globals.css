@@ -38,6 +38,9 @@
   --sidebar-ring: oklch(0.708 0 0);
   --brand-gold: #c9a227;
   --brand-gold-foreground: #1a1400;
+  --scrollbar-thumb: oklch(0.6 0 0 / 45%);
+  --scrollbar-thumb-hover: oklch(0.6 0 0 / 65%);
+  --scrollbar-track: oklch(0.6 0 0 / 12%);
 }
 
 .dark {
@@ -72,6 +75,9 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --scrollbar-thumb: oklch(0.85 0 0 / 35%);
+  --scrollbar-thumb-hover: oklch(0.85 0 0 / 55%);
+  --scrollbar-track: oklch(1 0 0 / 8%);
 }
 
 @theme inline {
@@ -123,4 +129,34 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Pipeline board horizontal scroll: always-visible, thick (~16px) drag
+   bar so the remaining stages are reachable without a hover-to-reveal
+   scrollbar or shift+wheel. Firefox has no pixel-size scrollbar control,
+   so "auto" (its thickest built-in option) is paired with scrollbar-color
+   for contrast; WebKit/Blink get an explicit height + styled thumb. */
+.kanban-scroll-x {
+  scrollbar-width: auto;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.kanban-scroll-x::-webkit-scrollbar {
+  height: 16px;
+}
+
+.kanban-scroll-x::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 9999px;
+}
+
+.kanban-scroll-x::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.kanban-scroll-x::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
 }
